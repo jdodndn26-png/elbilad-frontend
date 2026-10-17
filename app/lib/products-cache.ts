@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
 
 // ─── Products ────────────────────────────────────────────────────────────────
-// revalidate: 60s + tag-based revalidation on product mutations
+// revalidate: 86400s (24h) + tag-based revalidation on product mutations
 export const getCachedProducts = unstable_cache(
   async () => {
     try {
@@ -15,11 +15,11 @@ export const getCachedProducts = unstable_cache(
     }
   },
   ["all-products"],
-  { revalidate: 300, tags: ["products"] }
+  { revalidate: 86400, tags: ["products"] }
 );
 
 // ─── Hero Banners ─────────────────────────────────────────────────────────────
-// revalidate: 300s — banners change rarely, tag-based revalidation available
+// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedBanners = unstable_cache(
   async (): Promise<string[]> => {
     try {
@@ -35,11 +35,11 @@ export const getCachedBanners = unstable_cache(
     }
   },
   ["hero-banners"],
-  { revalidate: 300, tags: ["banners"] }
+  { revalidate: 86400, tags: ["banners"] }
 );
 
 // ─── Home Config (settings + max) ────────────────────────────────────────────
-// revalidate: 3600s — home layout config changes very rarely
+// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedHomeConfig = unstable_cache(
   async () => {
     try {
@@ -55,11 +55,11 @@ export const getCachedHomeConfig = unstable_cache(
     }
   },
   ["home-config"],
-  { revalidate: 3600, tags: ["home-settings"] }
+  { revalidate: 86400, tags: ["home-settings"] }
 );
 
 // ─── Category Banners Bulk ────────────────────────────────────────────────────
-// revalidate: 3600s — category banners change very rarely
+// revalidate: 86400s (24h), tag-based revalidation available
 // Takes a comma-joined string so unstable_cache can use it as a stable key
 export const getCachedBannerMap = unstable_cache(
   async (categoriesKey: string): Promise<Record<string, string[]>> => {
@@ -75,11 +75,11 @@ export const getCachedBannerMap = unstable_cache(
     }
   },
   ["category-banners-bulk"],
-  { revalidate: 3600, tags: ["category-banners"] }
+  { revalidate: 86400, tags: ["category-banners"] }
 );
 
 // ─── Company ──────────────────────────────────────────────────────────────────
-// revalidate: 3600s — company info changes very rarely
+// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedCompany = unstable_cache(
   async () => {
     try {
@@ -90,11 +90,11 @@ export const getCachedCompany = unstable_cache(
     }
   },
   ["company"],
-  { revalidate: 3600, tags: ["company"] }
+  { revalidate: 86400, tags: ["company"] }
 );
 
 // ─── Sub-categories Public ────────────────────────────────────────────────────
-// revalidate: 3600s — category list changes with products (tag: products)
+// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedSubCategoriesPublic = unstable_cache(
   async () => {
     try {
@@ -105,11 +105,11 @@ export const getCachedSubCategoriesPublic = unstable_cache(
     }
   },
   ["sub-categories-public"],
-  { revalidate: 3600, tags: ["products"] }
+  { revalidate: 86400, tags: ["products"] }
 );
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
-// revalidate: 300s — approved reviews don't change every second
+// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedReviews = unstable_cache(
   async () => {
     try {
@@ -120,7 +120,7 @@ export const getCachedReviews = unstable_cache(
     }
   },
   ["reviews"],
-  { revalidate: 300, tags: ["reviews"] }
+  { revalidate: 86400, tags: ["reviews"] }
 );
 
 // ─── Single product (for product detail page) ────────────────────────────────
@@ -136,7 +136,7 @@ export const getCachedProduct = (id: string) =>
       }
     },
     [`product-${id}`],
-    { revalidate: 300, tags: ["products"] }
+    { revalidate: 86400, tags: ["products"] }
   )();
 
 // ─── Search (uses cached products, no extra DB hit) ──────────────────────────

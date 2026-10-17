@@ -1,7 +1,7 @@
 import IPhone18DuoClient from "./IPhone18DuoClient";
 import { getCachedProducts } from "../../../lib/products-cache";
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 const KEYWORDS = ["ايفون 18 دو", "آيفون 18 دو", "iphone 18 duo", "iPhone 18 Duo", "iphone duo", "آيفون Duo", "ايفون Duo"];
 const EXCLUDE = ["pro", "max", "برو", "ماكس"];

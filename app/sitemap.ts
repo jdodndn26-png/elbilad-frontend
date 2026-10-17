@@ -22,6 +22,8 @@ const staticRoutes: { path: string; priority: number; changeFreq: MetadataRoute.
   { path: "/cart", priority: 0.5, changeFreq: "weekly" },
 ];
 
+export const revalidate = 86400;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
@@ -41,7 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let product_urls: MetadataRoute.Sitemap = [];
   try {
-    const res = await fetch(`${BACKEND_URL}/api/products`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${BACKEND_URL}/api/products`, { next: { revalidate: 86400 } });
     if (res.ok) {
       const products: { _id: string }[] = await res.json();
       product_urls = products.map((p) => ({

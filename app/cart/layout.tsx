@@ -5,7 +5,7 @@ const SITE_URL = "https://www.albiladksa.com";
 
 async function getCompany() {
   try {
-    const r = await fetch(`${BACKEND}/api/admin/company`, { next: { revalidate: 3600 } });
+    const r = await fetch(`${BACKEND}/api/admin/company`, { next: { revalidate: 86400 } });
     return r.ok ? r.json() : {};
   } catch { return {}; }
 }

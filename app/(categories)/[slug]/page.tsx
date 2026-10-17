@@ -3,7 +3,7 @@ import { slugConfigs } from "../../lib/categoryConfig";
 import CategoryPageClient from "./CategoryPageClient";
 import { getCachedProducts, getCachedCompany } from "../../lib/products-cache";
 
-export const revalidate = 60;
+export const revalidate = 86400;
 
 const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
 const SITE_URL = "https://www.albiladksa.com";

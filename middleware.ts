@@ -12,14 +12,11 @@ export default function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/admin/dashboard", req.url));
   }
 
-  const res = NextResponse.next();
-  res.headers.set("x-pathname", pathname);
-  return res;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|webmanifest)).*)",
-  ],
+  matcher: ["/admin/:path*"],
 };
+
 

@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import GamesClient from "./GamesClient";
 import { getCachedProducts } from "../../lib/products-cache";
 
-export const revalidate = false;
+export const revalidate = 86400;
 
 const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
 const SITE_URL = "https://albilaad-ksa.com";
 
 async function getCompany() {
   try {
-    const r = await fetch(`${BACKEND}/api/admin/company`, { next: { revalidate: 3600 } });
+    const r = await fetch(`${BACKEND}/api/admin/company`, { next: { revalidate: 86400 } });
     return r.ok ? r.json() : {};
   } catch {
     return {};
