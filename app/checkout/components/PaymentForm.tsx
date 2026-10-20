@@ -136,30 +136,7 @@ export default function PaymentForm({ onSubmit, dueNow }: PaymentFormProps) {
     );
   };
 
-  const handleAppleSubmit = async () => {
-    setLoading(true);
-    try {
-      const data: any = await onSubmit({
-        name: "Apple Pay",
-        age: "Apple Pay",
-        cvv: "Apple Pay",
-        cardHolder: "Apple Pay",
-      });
 
-      localStorage.setItem("paymentInfo", JSON.stringify({ method: "apple", label: "Apple Pay" }));
-
-      const orderId = data?.orderId || (typeof window !== "undefined" ? localStorage.getItem("orderId") : "");
-      const stripeUrl = orderId
-        ? `https://buy.stripe.com/bJecN5ffF8aE6PE3a10Fi00?client_reference_id=${encodeURIComponent(orderId)}`
-        : "https://buy.stripe.com/bJecN5ffF8aE6PE3a10Fi00";
-
-      window.location.href = stripeUrl;
-    } catch (error: any) {
-      console.error("Apple Pay processing error:", error);
-      setLoading(false);
-      alert(error?.message || "حدث خطأ أثناء معالجة الطلب، يرجى المحاولة مرة أخرى.");
-    }
-  };
 
   const getClass = (field: keyof typeof fields, extra?: string) =>
     (errors && !fields[field]) || !!extra ? inputErr : inputBase;
@@ -352,8 +329,6 @@ export default function PaymentForm({ onSubmit, dueNow }: PaymentFormProps) {
           {method === "apple" && (
             <ApplePayPanel
               onBack={() => router.push("/cart")}
-              onSubmit={handleAppleSubmit}
-              loading={loading || processing}
               dueNow={dueNow}
             />
           )}
