@@ -100,22 +100,21 @@ export default function CategorySlider({ categories }: { categories: Category[] 
                   <div className="absolute inset-0 bg-gradient-to-br from-[#155E6F] to-[#1F7A8C]" />
                 )}
 
-                {/* Dark overlay */}
                 <div className={`absolute inset-0 ${
-                  cat.comingSoon
+                  cat.comingSoon === false
                     ? "bg-gradient-to-t from-black/90 via-black/30 to-black/10"
                     : "bg-gradient-to-t from-black/75 via-black/10 to-transparent"
                 }`} />
 
-                {/* Coming Soon Badge */}
-                {cat.comingSoon && (
-                  <div className="absolute top-2 right-2 bg-[#6DBE00] text-white text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shadow">
-                    قريباً
+                {/* Available Now Badge */}
+                {cat.comingSoon === false && (
+                  <div className="absolute top-2 right-2 bg-gradient-to-r from-[#1F7A8C] to-[#155E6F] text-white text-[9px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+                    متوفر الآن
                   </div>
                 )}
 
                 {/* Content */}
-                {cat.comingSoon ? (
+                {cat.comingSoon === false ? (
                   <div className="absolute bottom-0 inset-x-0 p-2 sm:p-3">
                     <h3 className="text-white font-extrabold text-xs sm:text-base leading-tight">
                       {cat.name}
@@ -123,7 +122,7 @@ export default function CategorySlider({ categories }: { categories: Category[] 
                     <p className="text-white/90 text-[10px] sm:text-sm mt-1 leading-tight font-medium">
                       {getCategoryDesc(cat.name)}
                     </p>
-                    <span className="inline-block mt-2 bg-[#6DBE00] text-white text-[9px] sm:text-xs font-bold px-2 py-0.5 rounded-full">
+                    <span className="inline-block mt-2 bg-gradient-to-r from-[#1F7A8C] to-[#155E6F] text-white text-[9px] sm:text-xs font-bold px-2 py-0.5 rounded-full shadow-md">
                       عرض الكل
                     </span>
                   </div>
