@@ -12,21 +12,21 @@ const COMING_SOON_CARDS = [
     count: 0,
     image: "/8435e6ba-7c1d-4fc7-98fa-0193c4db8529.jpg",
     href: "/smartphones/iphone-18-pro-max",
-    comingSoon: true,
+    comingSoon: false,
   },
   {
     name: "ايفون 18 برو",
     count: 0,
     image: "/8435e6ba-7c1d-4fc7-98fa-0193c4db8529.jpg",
     href: "/smartphones/iphone-18-pro",
-    comingSoon: true,
+    comingSoon: false,
   },
   {
     name: "ايفون 18 دو",
     count: 0,
     image: "https://res.cloudinary.com/dllmx2yf3/image/upload/v1789347106/5b3e6b54-5d81-4779-bf50-b785d673956a_de1evw.webp",
     href: "/smartphones/iphone-18-duo",
-    comingSoon: true,
+    comingSoon: false,
   },
 ];
 
