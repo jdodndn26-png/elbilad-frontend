@@ -9,9 +9,17 @@ async function safeJson(res: Response) {
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = getAdminToken(req);
+  if (!token) {
+    const res = await fetch(`${getBackend()}/api/checkout/${id}/public`);
+    return NextResponse.json(await safeJson(res), { status: res.status });
+  }
   const res = await fetch(`${getBackend()}/api/admin/orders/${id}`, {
     headers: { cookie: `admin_token=${token}` },
   });
+  if (res.status === 401) {
+    const pubRes = await fetch(`${getBackend()}/api/checkout/${id}/public`);
+    return NextResponse.json(await safeJson(pubRes), { status: pubRes.status });
+  }
   return NextResponse.json(await safeJson(res), { status: res.status });
 }
 

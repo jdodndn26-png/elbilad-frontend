@@ -45,44 +45,7 @@ function LoadingScreen() {
   );
 }
 
-/* ── Success Modal ── */
-function SuccessModal({ confirmedId }: { confirmedId: string }) {
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-      <motion.div initial={{ scale: 0.88, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 260 }}
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <Link href="/" className="absolute top-3 left-3 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-400 transition z-10">
-          <X size={14} />
-        </Link>
-        <div className="bg-gradient-to-br from-[#1a6b7d] to-[#155e6f] px-6 pt-7 pb-5 text-center">
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, delay: 0.15 }}
-            className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-            <CheckCircle size={28} className="text-white" />
-          </motion.div>
-          <h2 className="text-white font-extrabold text-lg">تمت العملية بنجاح</h2>
-          <p className="text-white/65 text-xs mt-1">شكراً لثقتك بنا</p>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <p className="text-gray-500 text-xs leading-6 text-center">
-            يرجى التواصل مع موظف خدمة العملاء لاستكمال إجراءات شحن الطلب.
-          </p>
-          <div className="flex gap-2">
-            <a href={`/invoice/${confirmedId}`} target="_blank" rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#1a6b7d] text-white font-semibold text-xs hover:bg-[#155e6f] transition">
-              <FileText size={13} /> الفاتورة
-            </a>
-            <a href={`/invoice/${confirmedId}/receipt`} target="_blank" rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[#7CC043] text-white font-semibold text-xs hover:bg-[#6aad38] transition">
-              <Receipt size={13} /> سند القبض
-            </a>
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
+
 
 /* ── Main ── */
 export default function VerifyPage() {
@@ -209,9 +172,6 @@ export default function VerifyPage() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {confirmed && confirmedId && <SuccessModal key="success" confirmedId={confirmedId} />}
-      </AnimatePresence>
 
       <AnimatePresence>
         {phase === "verify" && (

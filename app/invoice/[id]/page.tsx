@@ -26,7 +26,9 @@ export default function PrintOrderPage() {
   }, [id]);
 
   useEffect(() => {
-    if (order) setTimeout(() => window.print(), 500);
+    if (order && typeof window !== "undefined" && window.self === window.top) {
+      setTimeout(() => window.print(), 500);
+    }
   }, [order]);
 
   if (!order) return <div style={{ textAlign: "center", padding: 40 }}>جاري التحميل...</div>;

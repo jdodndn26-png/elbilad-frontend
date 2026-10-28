@@ -45,7 +45,9 @@ export default function ContractPage() {
   }, []);
 
   useEffect(() => {
-    if (data) setTimeout(() => window.print(), 500);
+    if (data && typeof window !== "undefined" && window.self === window.top) {
+      setTimeout(() => window.print(), 500);
+    }
   }, [data]);
 
   if (!data) return <div style={{ textAlign: "center", padding: 40 }}>جاري التحميل...</div>;

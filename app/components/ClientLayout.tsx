@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import { Navbar } from "./navbar";
 import WhatsappButton from "./WhatsappButton";
 import SplashScreen from "./SplashScreen";
+import OrderNotificationModal from "./OrderNotificationModal";
 import { useCompanyStore } from "../store/companyStore";
 
 export default function ClientLayout({
@@ -16,7 +17,13 @@ export default function ClientLayout({
   company?: any;
 }) {
   const pathname = usePathname();
-  const isAdmin = pathname.startsWith("/admin") || pathname.startsWith("/invoice");
+  const isDocOrAdmin =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/invoice") ||
+    pathname.startsWith("/orders") ||
+    pathname.includes("/print") ||
+    pathname.includes("/contract") ||
+    pathname.includes("/receipt");
 
   if (company && !useCompanyStore.getState()._fetched) {
     const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -47,11 +54,12 @@ export default function ClientLayout({
   return (
     <>
       <Toaster position="top-center" reverseOrder={false} toastOptions={{ duration: 3500 }} />
-      {!isAdmin && <SplashScreen />}
-      {!isAdmin && <Navbar initialLogo={logo} />}
+      {!isDocOrAdmin && <SplashScreen />}
+      {!isDocOrAdmin && <Navbar initialLogo={logo} />}
       {children}
-      {!isAdmin && footer}
-      {!isAdmin && <WhatsappButton />}
+      {!isDocOrAdmin && footer}
+      {!isDocOrAdmin && <WhatsappButton />}
+      {!isDocOrAdmin && <OrderNotificationModal />}
     </>
   );
 }

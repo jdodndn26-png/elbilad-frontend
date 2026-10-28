@@ -238,24 +238,64 @@ export default function OrdersPage() {
                             عقد التقسيط
                           </button>
                         )}
-                        {(() => {
-                          const next = o.status === "pending" ? "confirmed" : o.status === "confirmed" ? "cancelled" : "pending";
-                          const cfg = {
-                            pending: { label: "تحويل لـ مؤكد", bg: "bg-green-500 hover:bg-green-600" },
-                            confirmed: { label: "تحويل لـ ملغي", bg: "bg-red-500 hover:bg-red-600" },
-                            cancelled: { label: "تحويل لـ انتظار", bg: "bg-yellow-500 hover:bg-yellow-600" }
-                          };
-                          const currentCfg = cfg[o.status] || cfg.pending;
-                          return (
+                        {o.status === "pending" && (
+                          <>
                             <button
-                              onClick={() => changeStatus(o._id, next)}
-                              className={`inline-flex items-center gap-1 ${currentCfg.bg} text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap`}
+                              onClick={() => changeStatus(o._id, "confirmed")}
+                              className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shadow-sm"
+                              title="تأكيد الطلب وإرسال إشعار للعميل"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                              {currentCfg.label}
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                              تأكيد
                             </button>
-                          );
-                        })()}
+                            <button
+                              onClick={() => changeStatus(o._id, "cancelled")}
+                              className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shadow-sm"
+                              title="إلغاء الطلب وإرسال إشعار للعميل"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              إلغاء
+                            </button>
+                          </>
+                        )}
+                        {o.status === "confirmed" && (
+                          <>
+                            <button
+                              onClick={() => changeStatus(o._id, "cancelled")}
+                              className="inline-flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              title="تحويل إلى ملغي"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              إلغاء
+                            </button>
+                            <button
+                              onClick={() => changeStatus(o._id, "pending")}
+                              className="inline-flex items-center gap-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              title="إعادة إلى قيد الانتظار"
+                            >
+                              انتظار
+                            </button>
+                          </>
+                        )}
+                        {o.status === "cancelled" && (
+                          <>
+                            <button
+                              onClick={() => changeStatus(o._id, "confirmed")}
+                              className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              title="تأكيد الطلب"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                              تأكيد
+                            </button>
+                            <button
+                              onClick={() => changeStatus(o._id, "pending")}
+                              className="inline-flex items-center gap-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              title="إعادة إلى قيد الانتظار"
+                            >
+                              انتظار
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => setConfirmDelete({ id: o._id, name: o.customer || o.orderId })}
                           className="inline-flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
