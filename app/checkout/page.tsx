@@ -67,15 +67,20 @@ export default function CheckoutPage() {
         throw new Error(data.error || "فشل إنشاء الطلب");
       }
 
-      // Save order info
+      // Save order info with tracking timestamp
+      const now = Date.now();
       if (data.orderId) localStorage.setItem("orderId", data.orderId);
-      if (data.dbId) localStorage.setItem("dbOrderId", data.dbId);
+      if (data.dbId) {
+        localStorage.setItem("dbOrderId", data.dbId);
+        localStorage.setItem("orderTracking_createdAt", String(now));
+        localStorage.removeItem(`order_handled_${data.dbId}`);
+      }
 
       // Dispatch order_created custom event immediately so OrderNotificationModal starts listening without refresh
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("order_created", {
-            detail: { dbOrderId: data.dbId, orderId: data.orderId },
+            detail: { dbOrderId: data.dbId, orderId: data.orderId, createdAt: now },
           })
         );
       }

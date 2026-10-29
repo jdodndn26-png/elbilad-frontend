@@ -107,14 +107,23 @@ export default function VerifyPage() {
   useEffect(() => {
     const id = typeof window !== "undefined" ? localStorage.getItem("dbOrderId") : null;
     const orderNum = typeof window !== "undefined" ? localStorage.getItem("orderId") : null;
+    const createdAtStr = typeof window !== "undefined" ? localStorage.getItem("orderTracking_createdAt") : null;
     if (!id) return;
+
+    // إذا تم تأكيد الطلب والانتهاء منه مسبقاً أو مر أكثر من 30 دقيقة، لا داعي للـ polling
+    if (localStorage.getItem(`order_handled_${id}`) === "true") return;
+    if (createdAtStr) {
+      const createdAt = Number(createdAtStr);
+      if (!isNaN(createdAt) && Date.now() - createdAt > 30 * 60 * 1000) return;
+    }
+
     setDbOrderId(id);
 
     // Make sure OrderNotificationModal is triggered
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("order_created", {
-          detail: { dbOrderId: id, orderId: orderNum || "" },
+          detail: { dbOrderId: id, orderId: orderNum || "", createdAt: Number(createdAtStr) || Date.now() },
         })
       );
     }

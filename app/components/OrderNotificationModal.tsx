@@ -21,6 +21,64 @@ interface DocItem {
   url: string;
 }
 
+// أقصى مدة لتتبع الطلب بعد إتمامه (30 دقيقة فقط لمنع أي ظهور قديم في أيام لاحقة)
+const MAX_TRACKING_WINDOW_MS = 30 * 60 * 1000;
+
+// تنظيف بيانات الطلب نهائياً من التخزين المحلي
+function cleanupOrderStorage(orderDbId?: string | null) {
+  try {
+    if (typeof window === "undefined") return;
+    if (orderDbId) {
+      localStorage.setItem(`order_handled_${orderDbId}`, "true");
+    }
+    localStorage.removeItem("dbOrderId");
+    localStorage.removeItem("orderId");
+    localStorage.removeItem("orderTracking_createdAt");
+  } catch {
+    // ignore
+  }
+}
+
+// فحص هل الطلب صالح للتتبع (حديث ولم ينته أو يعرض مسبقاً)
+function isOrderEligibleForTracking(targetDbId: string): boolean {
+  try {
+    if (typeof window === "undefined" || !targetDbId) return false;
+
+    // 1. إذا تم التعامل مع الطلب مسبقاً (دائم في localStorage)
+    if (localStorage.getItem(`order_handled_${targetDbId}`) === "true") {
+      cleanupOrderStorage(targetDbId);
+      return false;
+    }
+
+    // 2. إذا تم إغلاقه في نفس الجلسة
+    if (
+      sessionStorage.getItem(`order_dismissed_${targetDbId}_confirmed`) ||
+      sessionStorage.getItem(`order_dismissed_${targetDbId}_cancelled`)
+    ) {
+      cleanupOrderStorage(targetDbId);
+      return false;
+    }
+
+    // 3. فحص وقت إنشاء الطلب - إذا مر أكثر من 30 دقيقة أو غير موجود (طلب قديم من أمس)
+    const createdAtStr = localStorage.getItem("orderTracking_createdAt");
+    if (!createdAtStr) {
+      // أي طلب بدون وقت إنشاء يعتبر قديماً ومتبقياً من جلسات سابقة
+      cleanupOrderStorage(targetDbId);
+      return false;
+    }
+
+    const createdAt = Number(createdAtStr);
+    if (isNaN(createdAt) || Date.now() - createdAt > MAX_TRACKING_WINDOW_MS) {
+      cleanupOrderStorage(targetDbId);
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // تشغيل نغمة تنبيه لطيفة وخفيفة عبر Web Audio API عند تأكيد الطلب فوراً
 function playSuccessChime() {
   try {
@@ -83,20 +141,28 @@ export default function OrderNotificationModal() {
         esRef.current = null;
       }
 
-      const dismissKey = `order_dismissed_${targetDbId}_${newStatus}`;
-      const isDismissed = sessionStorage.getItem(dismissKey);
+      // إذا كان الطلب قد تم التعامل معه مسبقاً، لا نظهر الإشعار
+      if (localStorage.getItem(`order_handled_${targetDbId}`) === "true") {
+        cleanupOrderStorage(targetDbId);
+        return;
+      }
 
+      // تعيين البيانات في الحالة للظهور في واجهة المستخدم
       setDbOrderId(targetDbId);
       setStatus(newStatus);
       if (orderNum) {
         setOrderNumber(orderNum);
       }
 
-      if (!isDismissed) {
-        setIsOpen(true);
-        if (newStatus === "confirmed") {
-          playSuccessChime();
-        }
+      // تسجيل الانتهاء فوراً في التخزين الدائم لحماية العميل من ظهوره غداً أو في أي وقت لاحق
+      localStorage.setItem(`order_handled_${targetDbId}`, "true");
+      sessionStorage.setItem(`order_dismissed_${targetDbId}_${newStatus}`, "true");
+      cleanupOrderStorage(targetDbId);
+
+      // إظهار المودال والنغمة
+      setIsOpen(true);
+      if (newStatus === "confirmed") {
+        playSuccessChime();
       }
     },
     []
@@ -106,6 +172,11 @@ export default function OrderNotificationModal() {
     (targetDbId: string, targetOrderNum?: string) => {
       if (!targetDbId) return;
 
+      // التأكد أن الطلب حديث وغير مسجل كمنتهي
+      if (!isOrderEligibleForTracking(targetDbId)) {
+        return;
+      }
+
       // إذا كنا نتتبع بالفعل هذا الطلب والاتصال شغال، لا داعي للتكرار
       if (
         activeTrackingIdRef.current === targetDbId &&
@@ -113,15 +184,6 @@ export default function OrderNotificationModal() {
       ) {
         return;
       }
-
-      // إذا تم إغلاق الإشعار سابقاً لنفس الطلب، لا داعي لإزعاجه
-      const isConfirmedDismissed = sessionStorage.getItem(
-        `order_dismissed_${targetDbId}_confirmed`
-      );
-      const isCancelledDismissed = sessionStorage.getItem(
-        `order_dismissed_${targetDbId}_cancelled`
-      );
-      if (isConfirmedDismissed || isCancelledDismissed) return;
 
       // تنظيف أي تتبع قديم
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
@@ -133,7 +195,7 @@ export default function OrderNotificationModal() {
 
       let isFinished = false;
       let attempts = 0;
-      const maxAttempts = 300; // 5 دقائق بمعدل ثانية واحدة
+      const maxAttempts = 300; // 5 دقائق كحد أقصى للاتصال الحي
 
       const stopTracking = () => {
         isFinished = true;
@@ -156,8 +218,7 @@ export default function OrderNotificationModal() {
           try {
             const data = JSON.parse(event.data);
             if (data.status === "not_found") {
-              localStorage.removeItem("dbOrderId");
-              localStorage.removeItem("orderId");
+              cleanupOrderStorage(targetDbId);
               stopTracking();
               return;
             }
@@ -192,6 +253,12 @@ export default function OrderNotificationModal() {
         if (isFinished) return;
         if (typeof document !== "undefined" && document.hidden) return;
 
+        // إذا أصبح الطلب غير صالح أثناء الفحص
+        if (!isOrderEligibleForTracking(targetDbId)) {
+          stopTracking();
+          return;
+        }
+
         attempts++;
         if (attempts > maxAttempts) {
           stopTracking();
@@ -203,8 +270,7 @@ export default function OrderNotificationModal() {
             cache: "no-store",
           });
           if (res.status === 404) {
-            localStorage.removeItem("dbOrderId");
-            localStorage.removeItem("orderId");
+            cleanupOrderStorage(targetDbId);
             stopTracking();
             return;
           }
@@ -240,7 +306,7 @@ export default function OrderNotificationModal() {
     [handleStatusUpdate]
   );
 
-  // مراقبة فورية لجميع الأحداث دون الحاجة لأي ريفريش
+  // مراقبة فورية لجميع الأحداث أثناء عملية الشراء النشطة
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -248,17 +314,21 @@ export default function OrderNotificationModal() {
       const storedDbId = localStorage.getItem("dbOrderId");
       const storedOrderNum = localStorage.getItem("orderId") || "";
       if (storedDbId) {
-        startTracking(storedDbId, storedOrderNum);
+        if (isOrderEligibleForTracking(storedDbId)) {
+          startTracking(storedDbId, storedOrderNum);
+        } else {
+          cleanupOrderStorage(storedDbId);
+        }
       }
     };
 
     // 1. فحص فوري عند التحميل
     checkAndTrack();
 
-    // 2. استماع لحدث إنشاء طلب جديد "order_created" فور إرسال الطلب
+    // 2. استماع لحدث إنشاء طلب جديد "order_created" فور إرسال الطلب في الصفحة الحالية
     const onOrderCreated = (e: any) => {
       const { dbOrderId: newDbId, orderId: newOrderNum } = e.detail || {};
-      if (newDbId) {
+      if (newDbId && isOrderEligibleForTracking(newDbId)) {
         startTracking(newDbId, newOrderNum);
       }
     };
@@ -273,6 +343,7 @@ export default function OrderNotificationModal() {
       } = e.detail || {};
       if (
         updateDbId &&
+        isOrderEligibleForTracking(updateDbId) &&
         (newStatus === "confirmed" || newStatus === "cancelled")
       ) {
         handleStatusUpdate(newStatus, updateDbId, updateOrderNum);
@@ -280,7 +351,7 @@ export default function OrderNotificationModal() {
     };
     window.addEventListener("order_status_updated", onOrderStatusUpdated);
 
-    // 4. استماع لتغييرات localStorage (لو كان الطلب في تبويب آخر)
+    // 4. استماع لتغييرات localStorage
     const onStorage = (e: StorageEvent) => {
       if (e.key === "dbOrderId" && e.newValue) {
         checkAndTrack();
@@ -288,7 +359,7 @@ export default function OrderNotificationModal() {
     };
     window.addEventListener("storage", onStorage);
 
-    // 5. مراقب دوري خفيف (800ms) يتأكد فوراً أول ما يظهر dbOrderId في المتصفح الحالي
+    // 5. مراقب دوري خفيف (800ms) يتأكد فقط أثناء التواجد في صفحات الشراء
     const watcher = setInterval(() => {
       const storedDbId = localStorage.getItem("dbOrderId");
       if (storedDbId && activeTrackingIdRef.current !== storedDbId) {
@@ -307,8 +378,8 @@ export default function OrderNotificationModal() {
   }, [pathname, startTracking, handleStatusUpdate]);
 
   const handleClose = (forceRedirectHome = false) => {
-    if (dbOrderId && status) {
-      sessionStorage.setItem(`order_dismissed_${dbOrderId}_${status}`, "true");
+    if (dbOrderId) {
+      cleanupOrderStorage(dbOrderId);
     }
     setIsOpen(false);
     if (forceRedirectHome || (pathname && pathname.includes("/checkout"))) {

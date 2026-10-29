@@ -18,6 +18,9 @@ export function forwardCookies(req: NextRequest, init: RequestInit): RequestInit
   const existing = init.headers as Record<string, string> | undefined;
   return {
     ...init,
-    headers: { ...existing, ...(token ? { cookie: `admin_token=${token}` } : {}) },
+    headers: {
+      ...existing,
+      ...(token ? { cookie: `admin_token=${token}`, authorization: `Bearer ${token}` } : {}),
+    },
   };
 }
