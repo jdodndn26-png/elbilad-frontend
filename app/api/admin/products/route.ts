@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getBackend, forwardCookies } from "../_lib";
 
@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
     if (res.ok) {
       try {
-        revalidateTag("products", "fetch");
+        revalidateTag("products", "max");
+        revalidatePath("/", "layout");
       } catch { /* ignore in non-cache contexts */ }
     }
     return NextResponse.json(data, { status: res.status });

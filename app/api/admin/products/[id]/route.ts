@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getBackend, forwardCookies } from "../../_lib";
 
@@ -24,7 +24,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const data = await res.json();
     if (res.ok) {
       try {
-        revalidateTag("products", "fetch");
+        revalidateTag("products", "max");
+        revalidatePath("/", "layout");
       } catch { /* ignore */ }
     }
     return NextResponse.json(data, { status: res.status });
@@ -41,7 +42,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const data = text ? JSON.parse(text) : {};
     if (res.ok) {
       try {
-        revalidateTag("products", "fetch");
+        revalidateTag("products", "max");
+        revalidatePath("/", "layout");
       } catch { /* ignore */ }
     }
     return NextResponse.json(data, { status: res.status });

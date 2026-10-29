@@ -9,6 +9,9 @@ export async function POST(req: NextRequest) {
   const tag = req.nextUrl.searchParams.get("tag") || "products";
   revalidateTag(tag, "max");
   // Cascade revalidation for related tags
+  if (tag === "products") {
+    revalidatePath("/", "layout");
+  }
   if (tag === "home-settings") {
     revalidatePath("/");
   }
