@@ -31,12 +31,53 @@ interface Order {
 }
 interface Company { header?: string; footer?: string; nameAr?: string; currencyAr?: string; phone?: string; stamp?: string; }
 
+function resolveImgUrl(url?: string): string {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  const backend = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  return `${backend}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function preloadImages(urls: (string | undefined)[]): Promise<void> {
+  const validUrls = urls
+    .map((u) => resolveImgUrl(u))
+    .filter((u) => Boolean(u && u.trim()));
+
+  if (validUrls.length === 0) return Promise.resolve();
+
+  return Promise.all(
+    validUrls.map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          img.src = src;
+          if (img.complete && img.naturalWidth > 0) {
+            resolve();
+          } else {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          }
+        })
+    )
+  ).then(() => {});
+}
+
 export default function ContractPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<{ order: Order; company: Company } | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/admin/orders/${id}/invoice`).then((r) => r.json()).then(setData);
+    fetch(`/api/admin/orders/${id}/invoice`)
+      .then((r) => r.json())
+      .then(async (d) => {
+        setData(d);
+        await preloadImages([d?.company?.header, d?.company?.footer, d?.company?.stamp]);
+        setIsReady(true);
+      })
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -45,12 +86,37 @@ export default function ContractPage() {
   }, []);
 
   useEffect(() => {
-    if (data && typeof window !== "undefined" && window.self === window.top) {
-      setTimeout(() => window.print(), 500);
+    if (isReady && data && typeof window !== "undefined" && window.self === window.top) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [data]);
+  }, [isReady, data]);
 
-  if (!data) return <div style={{ textAlign: "center", padding: 40 }}>جاري التحميل...</div>;
+  // إرجاع العميل للموقع بعد إتمام أو إلغاء الطباعة
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      window.close();
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 400);
+    };
+
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, []);
+
+  if (!isReady || !data) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif", direction: "rtl", gap: 14, backgroundColor: "#fff" }}>
+        <div style={{ width: 44, height: 44, border: "4px solid #e5e7eb", borderTopColor: "#7c3aed", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        <div style={{ fontSize: 16, fontWeight: "bold", color: "#1f2937" }}>جاري تجهيز عقد التقسيط وتحميل الصور...</div>
+        <div style={{ fontSize: 13, color: "#6b7280" }}>يرجى الانتظار لحين اكتمال تجهيز الملف للطباعة</div>
+      </div>
+    );
+  }
 
   const { order, company } = data;
 
@@ -90,17 +156,38 @@ export default function ContractPage() {
     }
     @media print {
       @page { size: A4; margin: 10mm; }
+      .no-print { display: none !important; }
       html, body { margin: 0; padding: 0; background: #fff !important; }
       img[alt="header"], img[alt="footer"] { width: 100% !important; max-height: none !important; }
     }
   `;
 
-
   return (
     <div style={{ fontFamily: "Arial, sans-serif", padding: 24, maxWidth: 900, margin: "0 auto", direction: "rtl", backgroundColor: "#fff", minHeight: "100vh", color: "#000" }}>
       <style>{style}</style>
 
-      {company.header && <img src={company.header} alt="header" style={{ width: "100%", marginBottom: 24 }} />}
+      {/* Screen-only top action bar */}
+      <div className="no-print" style={{ padding: "10px 16px", backgroundColor: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <button
+          onClick={() => {
+            window.close();
+            setTimeout(() => { window.location.href = "/"; }, 200);
+          }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", backgroundColor: "#1f2937", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: "bold", border: "none", cursor: "pointer" }}
+        >
+          <span>الرجوع إلى المتجر</span>
+          <span>⬅</span>
+        </button>
+        <button
+          onClick={() => window.print()}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", backgroundColor: "#7c3aed", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: "bold", border: "none", cursor: "pointer" }}
+        >
+          <span>🖨️</span>
+          <span>طباعة العقد</span>
+        </button>
+      </div>
+
+      {company.header && <img src={resolveImgUrl(company.header)} alt="header" style={{ width: "100%", marginBottom: 24 }} />}
 
       {/* العنوان */}
       <div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -146,11 +233,11 @@ export default function ContractPage() {
         </div>
         <div style={{ textAlign: "center", width: 180 }}>
           <div style={{ borderTop: "1px solid #1a1a1a", paddingTop: 8, color: "#555" }}>الختم</div>
-          {company.stamp && <img src={company.stamp} alt="ختم" style={{ maxWidth: 130, maxHeight: 110, objectFit: "contain", marginTop: 8, opacity: 0.85 }} />}
+          {company.stamp && <img src={resolveImgUrl(company.stamp)} alt="ختم" style={{ maxWidth: 130, maxHeight: 110, objectFit: "contain", marginTop: 8, opacity: 0.85 }} />}
         </div>
       </div>
 
-      {company.footer && <img src={company.footer} alt="footer" style={{ width: "100%", marginTop: 24 }} />}
+      {company.footer && <img src={resolveImgUrl(company.footer)} alt="footer" style={{ width: "100%", marginTop: 24 }} />}
     </div>
   );
 }

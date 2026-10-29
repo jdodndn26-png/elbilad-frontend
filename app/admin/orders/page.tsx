@@ -42,6 +42,7 @@ export default function OrdersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const perPage = 10;
 
   // Debounce search input
@@ -105,16 +106,25 @@ export default function OrdersPage() {
   }
 
   async function changeStatus(id: string, status: string) {
-    const res = await fetch(`/api/admin/orders/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) {
-      setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, status: status as Order["status"] } : o)));
-      toast.success("تم تحديث الحالة ✅");
-    } else {
-      toast.error("فشل تحديث الحالة");
+    if (updatingId) return;
+    setUpdatingId(id);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setOrders((prev) => prev.map((o) => (o._id === id ? { ...o, status: status as Order["status"] } : o)));
+        toast.success("تم تحديث الحالة ✅");
+      } else {
+        toast.error(data.error || "فشل تحديث الحالة");
+      }
+    } catch {
+      toast.error("فشل الاتصال بالخادم");
+    } finally {
+      setUpdatingId(null);
     }
   }
 
@@ -242,7 +252,8 @@ export default function OrdersPage() {
                           <>
                             <button
                               onClick={() => changeStatus(o._id, "confirmed")}
-                              className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shadow-sm"
+                              disabled={updatingId === o._id}
+                              className={`inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shadow-sm ${updatingId === o._id ? "opacity-50 cursor-not-allowed" : ""}`}
                               title="تأكيد الطلب وإرسال إشعار للعميل"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -250,7 +261,8 @@ export default function OrdersPage() {
                             </button>
                             <button
                               onClick={() => changeStatus(o._id, "cancelled")}
-                              className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shadow-sm"
+                              disabled={updatingId === o._id}
+                              className={`inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap shadow-sm ${updatingId === o._id ? "opacity-50 cursor-not-allowed" : ""}`}
                               title="إلغاء الطلب وإرسال إشعار للعميل"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -262,7 +274,8 @@ export default function OrdersPage() {
                           <>
                             <button
                               onClick={() => changeStatus(o._id, "cancelled")}
-                              className="inline-flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              disabled={updatingId === o._id}
+                              className={`inline-flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap ${updatingId === o._id ? "opacity-50 cursor-not-allowed" : ""}`}
                               title="تحويل إلى ملغي"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -270,7 +283,8 @@ export default function OrdersPage() {
                             </button>
                             <button
                               onClick={() => changeStatus(o._id, "pending")}
-                              className="inline-flex items-center gap-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              disabled={updatingId === o._id}
+                              className={`inline-flex items-center gap-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap ${updatingId === o._id ? "opacity-50 cursor-not-allowed" : ""}`}
                               title="إعادة إلى قيد الانتظار"
                             >
                               انتظار
@@ -281,7 +295,8 @@ export default function OrdersPage() {
                           <>
                             <button
                               onClick={() => changeStatus(o._id, "confirmed")}
-                              className="inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              disabled={updatingId === o._id}
+                              className={`inline-flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap ${updatingId === o._id ? "opacity-50 cursor-not-allowed" : ""}`}
                               title="تأكيد الطلب"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -289,7 +304,8 @@ export default function OrdersPage() {
                             </button>
                             <button
                               onClick={() => changeStatus(o._id, "pending")}
-                              className="inline-flex items-center gap-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap"
+                              disabled={updatingId === o._id}
+                              className={`inline-flex items-center gap-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold px-2 py-1 rounded-lg transition-colors whitespace-nowrap ${updatingId === o._id ? "opacity-50 cursor-not-allowed" : ""}`}
                               title="إعادة إلى قيد الانتظار"
                             >
                               انتظار

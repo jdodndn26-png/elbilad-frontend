@@ -118,11 +118,17 @@ export default function VerifyPage() {
       }
       try {
         const res = await fetch(`/api/orders/${id}/status`);
+        if (res.status === 404 || res.status === 429) {
+          clearInterval(pollRef.current!);
+          return;
+        }
         if (!res.ok) return;
         const data = await res.json();
-        if (data.status === "confirmed") {
+        if (data.status === "confirmed" || data.status === "cancelled") {
           clearInterval(pollRef.current!);
-          setConfirmed(true);
+          if (data.status === "confirmed") {
+            setConfirmed(true);
+          }
         }
       } catch {
         // ignore network glitches

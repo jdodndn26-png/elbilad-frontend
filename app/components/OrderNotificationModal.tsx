@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
@@ -22,6 +23,7 @@ interface DocItem {
 }
 
 export default function OrderNotificationModal() {
+  const pathname = usePathname();
   const [status, setStatus] = useState<"confirmed" | "cancelled" | null>(null);
   const [dbOrderId, setDbOrderId] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string>("");
@@ -31,20 +33,58 @@ export default function OrderNotificationModal() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    let attempts = 0;
+    const maxAttempts = 60; // الحد الأقصى للمحاولات (5 دقائق)
+
     const checkOrder = async () => {
       const storedDbId = localStorage.getItem("dbOrderId");
       const storedOrderNum = localStorage.getItem("orderId") || "";
-      if (!storedDbId) return;
+      if (!storedDbId) {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        return;
+      }
+
+      // إذا تم إغلاق الإشعار سابقاً لنفس الطلب، توقف عن إرسال الطلبات
+      const isConfirmedDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_confirmed`);
+      const isCancelledDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_cancelled`);
+      if (isConfirmedDismissed || isCancelledDismissed) {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        return;
+      }
+
+      attempts++;
+      if (attempts > maxAttempts) {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        return;
+      }
 
       setDbOrderId(storedDbId);
       setOrderNumber(storedOrderNum);
 
       try {
         const res = await fetch(`/api/orders/${storedDbId}/status`);
+
+        // إذا كان الطلب غير موجود (404)، يتم حذف المعرف من التخزين وإيقاف الـ polling فوراً لمنع تكرار الخطأ
+        if (res.status === 404) {
+          localStorage.removeItem("dbOrderId");
+          localStorage.removeItem("orderId");
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          return;
+        }
+
+        // في حال تم تجاوز معدل الطلبات (429)، أوقف الـ polling لتجنب استهلاك الخادم
+        if (res.status === 429) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          return;
+        }
+
         if (!res.ok) return;
         const data = await res.json();
 
         if (data.status === "confirmed" || data.status === "cancelled") {
+          // تم الوصول للحالة النهائية للطلب، نوقف التكرار فوراً
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+
           const dismissKey = `order_dismissed_${storedDbId}_${data.status}`;
           const isDismissed = sessionStorage.getItem(dismissKey);
 
@@ -59,18 +99,25 @@ export default function OrderNotificationModal() {
     };
 
     checkOrder();
-    pollTimerRef.current = setInterval(checkOrder, 3000);
+    pollTimerRef.current = setInterval(checkOrder, 5000);
 
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, []);
 
-  const handleClose = () => {
+  const handleClose = (forceRedirectHome = false) => {
     if (dbOrderId && status) {
       sessionStorage.setItem(`order_dismissed_${dbOrderId}_${status}`, "true");
     }
     setIsOpen(false);
+    if (forceRedirectHome || (pathname && pathname.includes("/checkout"))) {
+      window.location.href = "/";
+    }
+  };
+
+  const handleContinueShopping = () => {
+    handleClose(true);
   };
 
   // يفتح صفحة الفاتورة/العقد/السند الأصلية فوراً والتي تفتح معها نافذة البرينت بريفيو تلقائياً
@@ -111,7 +158,7 @@ export default function OrderNotificationModal() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={handleClose}
+        onClick={() => handleClose(false)}
         className="fixed inset-0 bg-black/45 backdrop-blur-xs transition-opacity"
       />
 
@@ -125,7 +172,7 @@ export default function OrderNotificationModal() {
       >
         {/* Subtle Close Button */}
         <button
-          onClick={handleClose}
+          onClick={() => handleClose(false)}
           className="absolute top-3 left-3 p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition z-20"
           aria-label="إغلاق"
         >
@@ -196,10 +243,10 @@ export default function OrderNotificationModal() {
               })}
             </div>
 
-            {/* Simple Dismiss Button */}
+            {/* Simple Dismiss / Continue Shopping Button */}
             <button
-              onClick={handleClose}
-              className="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition shadow-xs"
+              onClick={handleContinueShopping}
+              className="w-full py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition shadow-xs cursor-pointer"
             >
               متابعة التسوق
             </button>
@@ -236,8 +283,8 @@ export default function OrderNotificationModal() {
                 واتساب الدعم
               </a>
               <button
-                onClick={handleClose}
-                className="py-2 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold transition"
+                onClick={handleContinueShopping}
+                className="py-2 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold transition cursor-pointer"
               >
                 إغلاق
               </button>

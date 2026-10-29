@@ -28,11 +28,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const token = getAdminToken(req);
   const body = await req.json();
   const endpoint = body.financials ? "financials" : "status";
-  const res = await fetch(`${getBackend()}/api/checkout/${id}/${endpoint}`, {
+
+  // Try the dedicated admin endpoint first (covered by 600 req/min adminLimiter)
+  let res = await fetch(`${getBackend()}/api/admin/orders/${id}/${endpoint}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", cookie: `admin_token=${token}` },
     body: JSON.stringify(body),
   });
+
+  // Fallback to checkout endpoint if admin route returns 404
+  if (res.status === 404) {
+    res = await fetch(`${getBackend()}/api/checkout/${id}/${endpoint}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", cookie: `admin_token=${token}` },
+      body: JSON.stringify(body),
+    });
+  }
+
   return NextResponse.json(await safeJson(res), { status: res.status });
 }
 

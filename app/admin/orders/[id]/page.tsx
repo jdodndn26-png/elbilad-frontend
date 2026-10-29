@@ -45,14 +45,21 @@ export default function OrderDetailPage() {
   }
 
   async function changeStatus(status: string) {
-    const res = await fetch(`/api/admin/orders/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) {
-      setOrder((prev) => prev ? { ...prev, status: status as Order["status"] } : prev);
-      toast.success("تم تحديث الحالة ✅");
+    try {
+      const res = await fetch(`/api/admin/orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setOrder((prev) => prev ? { ...prev, status: status as Order["status"] } : prev);
+        toast.success("تم تحديث الحالة ✅");
+      } else {
+        toast.error(data.error || "فشل تحديث الحالة");
+      }
+    } catch {
+      toast.error("فشل الاتصال بالخادم");
     }
   }
 
