@@ -26,6 +26,10 @@ export default function DownPaymentsPage() {
   const [savingCat, setSavingCat] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
 
+  // Custom Category Input State
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
+
   // Delete Confirmation Modal State
   const [confirmDeleteCat, setConfirmDeleteCat] = useState<string | null>(null);
 
@@ -40,13 +44,20 @@ export default function DownPaymentsPage() {
         if (dpData?.amounts && Array.isArray(dpData.amounts)) {
           setAmounts([...dpData.amounts].sort((a, b) => a - b));
         }
-        if (Array.isArray(catsData)) {
-          const names = catsData
-            .map((c: { name: string }) => c.name)
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b, "ar"));
-          setCategories(names);
-        }
+
+        const catsNames = Array.isArray(catsData)
+          ? catsData.map((c: { name?: string }) => c.name).filter((n): n is string => Boolean(n))
+          : [];
+        const cdpNames = Array.isArray(cdpData)
+          ? cdpData.map((c: { category?: string }) => c.category).filter((n): n is string => Boolean(n))
+          : [];
+
+        // Combine categories from products/sub-categories AND already configured down payments
+        const mergedCategories = Array.from(new Set([...catsNames, ...cdpNames])).sort((a, b) =>
+          a.localeCompare(b, "ar")
+        );
+        setCategories(mergedCategories);
+
         if (Array.isArray(cdpData)) {
           setCategoryDownPayments(cdpData);
         }
@@ -71,9 +82,22 @@ export default function DownPaymentsPage() {
   }, [selectedCategory, categoryDownPayments]);
 
   const hasUnsavedCatChanges = useMemo(() => {
+    if (!selectedCategory) return false;
     if (catAmounts.length !== initialCatAmounts.length) return true;
     return catAmounts.some((val, idx) => val !== initialCatAmounts[idx]);
-  }, [catAmounts, initialCatAmounts]);
+  }, [catAmounts, initialCatAmounts, selectedCategory]);
+
+  // Protect against accidental refresh when there are unsaved changes
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (hasUnsavedCatChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedCatChanges]);
 
   // Handle switching category safely with unsaved changes check
   function handleSelectCategory(cat: string) {
@@ -83,6 +107,27 @@ export default function DownPaymentsPage() {
       }
     }
     setSelectedCategory(cat);
+  }
+
+  // Handle custom model creation/selection
+  function handleAddCustomCategory() {
+    const trimmed = customCategoryInput.trim();
+    if (!trimmed) {
+      toast.error("يرجى كتابة اسم الموديل");
+      return;
+    }
+    if (hasUnsavedCatChanges) {
+      if (!window.confirm("لديك تعديلات غير محفوظة لهذا الموديل، هل تريد تجاهلها والانتقال؟")) {
+        return;
+      }
+    }
+    setCategories((prev) =>
+      prev.includes(trimmed) ? prev : [...prev, trimmed].sort((a, b) => a.localeCompare(b, "ar"))
+    );
+    setSelectedCategory(trimmed);
+    setCustomCategoryInput("");
+    setShowCustomInput(false);
+    toast.success(`تم اختيار الموديل "${trimmed}"`);
   }
 
   // Save Global amounts
@@ -156,7 +201,7 @@ export default function DownPaymentsPage() {
       return;
     }
     setCatAmounts([...amounts]);
-    toast.success("تم نسخ الدفعات العامة ✅");
+    toast.success("تم نسخ الدفعات العامة ✅ (تذكر الضغط على حفظ التعديلات)");
   }
 
   // Save custom down payments for selected category
@@ -175,13 +220,20 @@ export default function DownPaymentsPage() {
         credentials: "include",
         body: JSON.stringify({ amounts: sorted }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "فشل الحفظ");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !data.category) {
+        throw new Error(data?.error || "فشل الحفظ في قاعدة البيانات");
+      }
 
       setCategoryDownPayments((prev) => {
         const filtered = prev.filter((c) => c.category !== selectedCategory);
-        return [...filtered, { category: data?.category ?? selectedCategory, amounts: data?.amounts ?? sorted }];
+        return [...filtered, { category: data.category, amounts: data.amounts ?? sorted }];
       });
+      setCategories((prev) =>
+        prev.includes(selectedCategory)
+          ? prev
+          : [...prev, selectedCategory].sort((a, b) => a.localeCompare(b, "ar"))
+      );
       setInitialCatAmounts(sorted);
       toast.success(`تم حفظ دفعات ${selectedCategory} بنجاح ✅`);
     } catch (e: unknown) {
@@ -384,36 +436,85 @@ export default function DownPaymentsPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-xs sm:text-sm font-bold text-gray-700">إضافة / تعديل دفعات موديل</h3>
             {hasUnsavedCatChanges && selectedCategory && (
-              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
-                ● تعديلات غير محفوظة
+              <span className="text-xs text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full font-bold animate-pulse">
+                ● لديك تعديلات غير محفوظة
               </span>
             )}
           </div>
 
           <div>
-            <label className="text-xs text-gray-500 mb-1.5 block">اختر الموديل أو التصنيف الفرعي</label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => handleSelectCategory(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="">-- اضغط لاختيار الموديل --</option>
-              {categories.map((cat) => {
-                const isCustom = categoryDownPayments.some((c) => c.category === cat);
-                return (
-                  <option key={cat} value={cat}>
-                    {cat} {isCustom ? "★ (مضبوط)" : ""}
-                  </option>
-                );
-              })}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-gray-600 font-semibold">اختر الموديل أو التصنيف الفرعي</label>
+              <button
+                type="button"
+                onClick={() => setShowCustomInput(!showCustomInput)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline"
+              >
+                {showCustomInput ? "✕ إلغاء إدخال يدوي" : "➕ الموديل غير موجود؟ اكتب اسمه يدويًا"}
+              </button>
+            </div>
+
+            {showCustomInput ? (
+              <div className="flex flex-col sm:flex-row gap-2 bg-blue-50/60 p-3 rounded-lg border border-blue-200">
+                <input
+                  type="text"
+                  value={customCategoryInput}
+                  onChange={(e) => setCustomCategoryInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddCustomCategory()}
+                  placeholder="اكتب اسم الموديل الجديد (مثال: iPhone 16 Pro Max)"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomCategory}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors whitespace-nowrap"
+                >
+                  تحديد الموديل
+                </button>
+              </div>
+            ) : (
+              <select
+                value={selectedCategory}
+                onChange={(e) => handleSelectCategory(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">-- اضغط لاختيار الموديل --</option>
+                {categories.map((cat) => {
+                  const isCustom = categoryDownPayments.some((c) => c.category === cat);
+                  return (
+                    <option key={cat} value={cat}>
+                      {cat} {isCustom ? "★ (مضبوط)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
           </div>
 
           {selectedCategory && (
-            <div className="space-y-4 pt-2 border-t border-gray-100">
+            <div className="space-y-4 pt-3 border-t border-gray-100">
+              {/* شريط تنبيه التعديلات غير المحفوظة مع زر حفظ فوري */}
+              {hasUnsavedCatChanges && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-2 text-center sm:text-right">
+                    <span className="text-amber-600 text-base">⚠️</span>
+                    <p className="text-xs font-bold text-amber-900 leading-relaxed">
+                      تنبيه: قمت بتعديل مبالغ هذا الموديل. اضغط على حفظ لحفظها نهائيًا، حتى لا تختفي عند تحديث الصفحة!
+                    </p>
+                  </div>
+                  <button
+                    onClick={saveCategoryDownPayments}
+                    disabled={savingCat}
+                    className="w-full sm:w-auto px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shrink-0 transition-colors shadow-2xs"
+                  >
+                    {savingCat ? "جاري الحفظ..." : "💾 حفظ الآن"}
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <p className="text-xs text-gray-600 font-semibold">
-                  الدفعات المحددة لـ <span className="text-blue-600">{selectedCategory}</span>:
+                <p className="text-xs text-gray-700 font-bold">
+                  الدفعات المحددة لـ <span className="text-blue-700 underline underline-offset-4 font-black">« {selectedCategory} »</span>:
                 </p>
                 <button
                   onClick={copyFromGlobal}
@@ -425,8 +526,8 @@ export default function DownPaymentsPage() {
               </div>
 
               {catAmounts.length === 0 ? (
-                <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
-                  لا توجد دفعات مخصصة لهذا الموديل حالياً. سيستخدم المتجر الدفعات العامة.
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-600 leading-relaxed">
+                  لا توجد دفعات مخصصة لهذا الموديل حالياً. سيستخدم المتجر الدفعات العامة ما لم تقم بإضافة مبالغ وحفظها.
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -480,9 +581,13 @@ export default function DownPaymentsPage() {
                 <button
                   onClick={saveCategoryDownPayments}
                   disabled={savingCat || catAmounts.length === 0}
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-xs"
+                  className={`flex-1 py-2.5 text-white rounded-lg text-sm font-bold transition-all shadow-xs flex items-center justify-center gap-2 ${
+                    hasUnsavedCatChanges
+                      ? "bg-blue-600 hover:bg-blue-700 ring-2 ring-blue-400 ring-offset-1"
+                      : "bg-blue-600 hover:bg-blue-700"
+                  } disabled:opacity-50`}
                 >
-                  {savingCat ? "جاري حفظ الدفعات..." : "💾 حفظ دفعات هذا الموديل"}
+                  {savingCat ? "جاري حفظ الدفعات..." : "💾 حفظ دفعات هذا الموديل في قاعدة البيانات"}
                 </button>
 
                 {categoryDownPayments.some((c) => c.category === selectedCategory) && (
