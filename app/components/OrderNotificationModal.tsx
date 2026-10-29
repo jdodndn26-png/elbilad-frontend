@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Check,
   X,
@@ -10,7 +10,6 @@ import {
   FileCheck2,
   Receipt,
   Printer,
-  ChevronLeft,
   MessageCircle,
 } from "lucide-react";
 
@@ -22,147 +21,290 @@ interface DocItem {
   url: string;
 }
 
+// تشغيل نغمة تنبيه لطيفة وخفيفة عبر Web Audio API عند تأكيد الطلب فوراً
+function playSuccessChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    // نغمة أولى D5 (587.33 Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(587.33, now);
+    gain1.gain.setValueAtTime(0.18, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+
+    // نغمة ثانية A5 (880 Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(880, now + 0.12);
+    gain2.gain.setValueAtTime(0.22, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.6);
+  } catch {
+    // Audio blocked or not supported
+  }
+}
+
 export default function OrderNotificationModal() {
   const pathname = usePathname();
   const [status, setStatus] = useState<"confirmed" | "cancelled" | null>(null);
   const [dbOrderId, setDbOrderId] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string>("");
   const [isOpen, setIsOpen] = useState(false);
+
+  const activeTrackingIdRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const esRef = useRef<EventSource | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const storedDbId = localStorage.getItem("dbOrderId");
-    const storedOrderNum = localStorage.getItem("orderId") || "";
-    if (!storedDbId) return;
-
-    // إذا تم إغلاق الإشعار سابقاً لنفس الطلب، لا داعي لطلب أي شيء
-    const isConfirmedDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_confirmed`);
-    const isCancelledDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_cancelled`);
-    if (isConfirmedDismissed || isCancelledDismissed) return;
-
-    setDbOrderId(storedDbId);
-    setOrderNumber(storedOrderNum);
-
-    let es: EventSource | null = null;
-    let isFinished = false;
-    let attempts = 0;
-    const maxAttempts = 50; // محاولات الـ fallback كحد أقصى
-
-    const cleanup = () => {
-      isFinished = true;
+  const handleStatusUpdate = useCallback(
+    (newStatus: "confirmed" | "cancelled", targetDbId: string, orderNum?: string) => {
+      // إيقاف أي تتبع نشط فوراً
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current);
         pollTimerRef.current = null;
       }
-      if (es) {
-        es.close();
-        es = null;
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
       }
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
 
-    const handleStatusUpdate = (newStatus: "confirmed" | "cancelled") => {
-      if (isFinished) return;
-      cleanup();
-
-      const dismissKey = `order_dismissed_${storedDbId}_${newStatus}`;
+      const dismissKey = `order_dismissed_${targetDbId}_${newStatus}`;
       const isDismissed = sessionStorage.getItem(dismissKey);
 
+      setDbOrderId(targetDbId);
       setStatus(newStatus);
+      if (orderNum) {
+        setOrderNumber(orderNum);
+      }
+
       if (!isDismissed) {
         setIsOpen(true);
+        if (newStatus === "confirmed") {
+          playSuccessChime();
+        }
       }
-    };
+    },
+    []
+  );
 
-    // 1. الاتصال الفوري عبر Server-Sent Events (SSE) للاستلام اللحظي 0ms بمجرد ضغط الأدمن
-    try {
-      es = new EventSource(`/api/orders/${storedDbId}/live`);
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.status === "not_found") {
-            localStorage.removeItem("dbOrderId");
-            localStorage.removeItem("orderId");
-            cleanup();
-            return;
-          }
-          if (data.status === "confirmed" || data.status === "cancelled") {
-            handleStatusUpdate(data.status);
-          }
-        } catch {
-          // ignore parse error
-        }
-      };
-      es.onerror = () => {
-        // في حال وجود مشكلة في اتصال SSE، يعتمد فوراً على الـ fallback polling
-        if (es) {
-          es.close();
-          es = null;
-        }
-      };
-    } catch {
-      // EventSource غير مدعوم في المتصفح القديم
-    }
+  const startTracking = useCallback(
+    (targetDbId: string, targetOrderNum?: string) => {
+      if (!targetDbId) return;
 
-    // 2. فحص دوري ذكي (Smart Fallback Polling)
-    const checkOrder = async () => {
-      if (isFinished) return;
-      // إذا كان التبويب مخفياً في الخلفية، لا تستهلك أي ريكوستات
-      if (typeof document !== "undefined" && document.hidden) return;
-
-      attempts++;
-      if (attempts > maxAttempts) {
-        cleanup();
+      // إذا كنا نتتبع بالفعل هذا الطلب والاتصال شغال، لا داعي للتكرار
+      if (
+        activeTrackingIdRef.current === targetDbId &&
+        (esRef.current || pollTimerRef.current)
+      ) {
         return;
       }
 
+      // إذا تم إغلاق الإشعار سابقاً لنفس الطلب، لا داعي لإزعاجه
+      const isConfirmedDismissed = sessionStorage.getItem(
+        `order_dismissed_${targetDbId}_confirmed`
+      );
+      const isCancelledDismissed = sessionStorage.getItem(
+        `order_dismissed_${targetDbId}_cancelled`
+      );
+      if (isConfirmedDismissed || isCancelledDismissed) return;
+
+      // تنظيف أي تتبع قديم
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      if (esRef.current) esRef.current.close();
+
+      activeTrackingIdRef.current = targetDbId;
+      setDbOrderId(targetDbId);
+      if (targetOrderNum) setOrderNumber(targetOrderNum);
+
+      let isFinished = false;
+      let attempts = 0;
+      const maxAttempts = 300; // 5 دقائق بمعدل ثانية واحدة
+
+      const stopTracking = () => {
+        isFinished = true;
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        if (esRef.current) {
+          esRef.current.close();
+          esRef.current = null;
+        }
+      };
+
+      // 1. الاتصال اللحظي الفوري عبر Server-Sent Events (SSE) (وصول التحديث 0ms بمجرد ضغط الأدمن)
       try {
-        const res = await fetch(`/api/orders/${storedDbId}/status`, { cache: "no-store" });
+        const es = new EventSource(`/api/orders/${targetDbId}/live`);
+        esRef.current = es;
 
-        // إذا كان الطلب غير موجود (404)، يتم تنظيف التخزين وإيقاف كل شيء فوراً
-        if (res.status === 404) {
-          localStorage.removeItem("dbOrderId");
-          localStorage.removeItem("orderId");
-          cleanup();
-          return;
-        }
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.status === "not_found") {
+              localStorage.removeItem("dbOrderId");
+              localStorage.removeItem("orderId");
+              stopTracking();
+              return;
+            }
+            if (data.orderId && !targetOrderNum) {
+              setOrderNumber(data.orderId);
+            }
+            if (data.status === "confirmed" || data.status === "cancelled") {
+              stopTracking();
+              handleStatusUpdate(
+                data.status,
+                targetDbId,
+                data.orderId || targetOrderNum
+              );
+            }
+          } catch {
+            // ignore parse error
+          }
+        };
 
-        if (res.status === 429) {
-          cleanup();
-          return;
-        }
-
-        if (!res.ok) return;
-        const data = await res.json();
-
-        if (data.status === "confirmed" || data.status === "cancelled") {
-          handleStatusUpdate(data.status);
-        }
+        es.onerror = () => {
+          if (esRef.current) {
+            esRef.current.close();
+            esRef.current = null;
+          }
+        };
       } catch {
-        // ignore network error
+        // SSE unsupported
+      }
+
+      // 2. فحص سريع احتياطي كل ثانية واحدة (Ultra-fast 1s Polling)
+      const checkOrder = async () => {
+        if (isFinished) return;
+        if (typeof document !== "undefined" && document.hidden) return;
+
+        attempts++;
+        if (attempts > maxAttempts) {
+          stopTracking();
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/orders/${targetDbId}/status`, {
+            cache: "no-store",
+          });
+          if (res.status === 404) {
+            localStorage.removeItem("dbOrderId");
+            localStorage.removeItem("orderId");
+            stopTracking();
+            return;
+          }
+          if (res.status === 429) {
+            stopTracking();
+            return;
+          }
+          if (!res.ok) return;
+
+          const data = await res.json();
+          if (data.orderId && !targetOrderNum) {
+            setOrderNumber(data.orderId);
+          }
+          if (data.status === "confirmed" || data.status === "cancelled") {
+            stopTracking();
+            handleStatusUpdate(
+              data.status,
+              targetDbId,
+              data.orderId || targetOrderNum
+            );
+          }
+        } catch {
+          // ignore network glitch
+        }
+      };
+
+      // فحص أولي سريع فوراً
+      checkOrder();
+
+      // تكرار الفحص كل ثانية واحدة فقط كـ fallback
+      pollTimerRef.current = setInterval(checkOrder, 1000);
+    },
+    [handleStatusUpdate]
+  );
+
+  // مراقبة فورية لجميع الأحداث دون الحاجة لأي ريفريش
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const checkAndTrack = () => {
+      const storedDbId = localStorage.getItem("dbOrderId");
+      const storedOrderNum = localStorage.getItem("orderId") || "";
+      if (storedDbId) {
+        startTracking(storedDbId, storedOrderNum);
       }
     };
 
-    // فحص أولي سريع
-    checkOrder();
+    // 1. فحص فوري عند التحميل
+    checkAndTrack();
 
-    // تكرار سريع كل 2.5 ثانية فقط عندما تكون الصفحة ظاهرة، ويتوقف تماماً بمجرد وصول التأكيد
-    pollTimerRef.current = setInterval(checkOrder, 2500);
-
-    // فحص فوري عند العودة لتبويب الموقع
-    const onVisibilityChange = () => {
-      if (typeof document !== "undefined" && !document.hidden && !isFinished) {
-        checkOrder();
+    // 2. استماع لحدث إنشاء طلب جديد "order_created" فور إرسال الطلب
+    const onOrderCreated = (e: any) => {
+      const { dbOrderId: newDbId, orderId: newOrderNum } = e.detail || {};
+      if (newDbId) {
+        startTracking(newDbId, newOrderNum);
       }
     };
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("order_created", onOrderCreated);
+
+    // 3. استماع لحدث تحديث حالة الطلب "order_status_updated"
+    const onOrderStatusUpdated = (e: any) => {
+      const {
+        status: newStatus,
+        dbOrderId: updateDbId,
+        orderId: updateOrderNum,
+      } = e.detail || {};
+      if (
+        updateDbId &&
+        (newStatus === "confirmed" || newStatus === "cancelled")
+      ) {
+        handleStatusUpdate(newStatus, updateDbId, updateOrderNum);
+      }
+    };
+    window.addEventListener("order_status_updated", onOrderStatusUpdated);
+
+    // 4. استماع لتغييرات localStorage (لو كان الطلب في تبويب آخر)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "dbOrderId" && e.newValue) {
+        checkAndTrack();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    // 5. مراقب دوري خفيف (800ms) يتأكد فوراً أول ما يظهر dbOrderId في المتصفح الحالي
+    const watcher = setInterval(() => {
+      const storedDbId = localStorage.getItem("dbOrderId");
+      if (storedDbId && activeTrackingIdRef.current !== storedDbId) {
+        checkAndTrack();
+      }
+    }, 800);
 
     return () => {
-      cleanup();
+      window.removeEventListener("order_created", onOrderCreated);
+      window.removeEventListener("order_status_updated", onOrderStatusUpdated);
+      window.removeEventListener("storage", onStorage);
+      clearInterval(watcher);
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      if (esRef.current) esRef.current.close();
     };
-  }, []);
+  }, [pathname, startTracking, handleStatusUpdate]);
 
   const handleClose = (forceRedirectHome = false) => {
     if (dbOrderId && status) {
@@ -210,7 +352,10 @@ export default function OrderNotificationModal() {
   ];
 
   return (
-    <div dir="rtl" className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4">
+    <div
+      dir="rtl"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4"
+    >
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -254,7 +399,10 @@ export default function OrderNotificationModal() {
             </h3>
 
             {orderNumber && (
-              <div className="inline-block px-2.5 py-0.5 mt-1 rounded-md bg-gray-50 border border-gray-200/80 text-[11px] font-mono text-gray-600" dir="ltr">
+              <div
+                className="inline-block px-2.5 py-0.5 mt-1 rounded-md bg-gray-50 border border-gray-200/80 text-[11px] font-mono text-gray-600"
+                dir="ltr"
+              >
                 #{orderNumber}
               </div>
             )}
@@ -280,7 +428,10 @@ export default function OrderNotificationModal() {
                       {doc.id}
                     </span>
 
-                    <IconComp size={16} className="text-gray-400 group-hover:text-emerald-600 shrink-0 transition-colors" />
+                    <IconComp
+                      size={16}
+                      className="text-gray-400 group-hover:text-emerald-600 shrink-0 transition-colors"
+                    />
 
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-xs text-gray-900 group-hover:text-emerald-900 truncate">
@@ -321,18 +472,24 @@ export default function OrderNotificationModal() {
             </h3>
 
             {orderNumber && (
-              <p className="text-[11px] text-gray-400 font-mono mb-2" dir="ltr">
+              <p
+                className="text-[11px] text-gray-400 font-mono mb-2"
+                dir="ltr"
+              >
                 #{orderNumber}
               </p>
             )}
 
             <p className="text-xs text-gray-500 leading-relaxed mb-4">
-              نأسف، تم إلغاء طلبك من قبل الإدارة. لأي استفسار، يمكنك التواصل مع خدمة العملاء.
+              نأسف، تم إلغاء طلبك من قبل الإدارة. لأي استفسار، يمكنك التواصل مع
+              خدمة العملاء.
             </p>
 
             <div className="flex gap-2">
               <a
-                href={`https://wa.me/966500000000?text=${encodeURIComponent(`أستفسر عن إلغاء طلبي رقم ${orderNumber}`)}`}
+                href={`https://wa.me/966500000000?text=${encodeURIComponent(
+                  `أستفسر عن إلغاء طلبي رقم ${orderNumber}`
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition"
