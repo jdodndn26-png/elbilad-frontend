@@ -33,48 +33,104 @@ export default function OrderNotificationModal() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const storedDbId = localStorage.getItem("dbOrderId");
+    const storedOrderNum = localStorage.getItem("orderId") || "";
+    if (!storedDbId) return;
+
+    // إذا تم إغلاق الإشعار سابقاً لنفس الطلب، لا داعي لطلب أي شيء
+    const isConfirmedDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_confirmed`);
+    const isCancelledDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_cancelled`);
+    if (isConfirmedDismissed || isCancelledDismissed) return;
+
+    setDbOrderId(storedDbId);
+    setOrderNumber(storedOrderNum);
+
+    let es: EventSource | null = null;
+    let isFinished = false;
     let attempts = 0;
-    const maxAttempts = 60; // الحد الأقصى للمحاولات (5 دقائق)
+    const maxAttempts = 50; // محاولات الـ fallback كحد أقصى
 
+    const cleanup = () => {
+      isFinished = true;
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      if (es) {
+        es.close();
+        es = null;
+      }
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+
+    const handleStatusUpdate = (newStatus: "confirmed" | "cancelled") => {
+      if (isFinished) return;
+      cleanup();
+
+      const dismissKey = `order_dismissed_${storedDbId}_${newStatus}`;
+      const isDismissed = sessionStorage.getItem(dismissKey);
+
+      setStatus(newStatus);
+      if (!isDismissed) {
+        setIsOpen(true);
+      }
+    };
+
+    // 1. الاتصال الفوري عبر Server-Sent Events (SSE) للاستلام اللحظي 0ms بمجرد ضغط الأدمن
+    try {
+      es = new EventSource(`/api/orders/${storedDbId}/live`);
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.status === "not_found") {
+            localStorage.removeItem("dbOrderId");
+            localStorage.removeItem("orderId");
+            cleanup();
+            return;
+          }
+          if (data.status === "confirmed" || data.status === "cancelled") {
+            handleStatusUpdate(data.status);
+          }
+        } catch {
+          // ignore parse error
+        }
+      };
+      es.onerror = () => {
+        // في حال وجود مشكلة في اتصال SSE، يعتمد فوراً على الـ fallback polling
+        if (es) {
+          es.close();
+          es = null;
+        }
+      };
+    } catch {
+      // EventSource غير مدعوم في المتصفح القديم
+    }
+
+    // 2. فحص دوري ذكي (Smart Fallback Polling)
     const checkOrder = async () => {
-      const storedDbId = localStorage.getItem("dbOrderId");
-      const storedOrderNum = localStorage.getItem("orderId") || "";
-      if (!storedDbId) {
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-        return;
-      }
-
-      // إذا تم إغلاق الإشعار سابقاً لنفس الطلب، توقف عن إرسال الطلبات
-      const isConfirmedDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_confirmed`);
-      const isCancelledDismissed = sessionStorage.getItem(`order_dismissed_${storedDbId}_cancelled`);
-      if (isConfirmedDismissed || isCancelledDismissed) {
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-        return;
-      }
+      if (isFinished) return;
+      // إذا كان التبويب مخفياً في الخلفية، لا تستهلك أي ريكوستات
+      if (typeof document !== "undefined" && document.hidden) return;
 
       attempts++;
       if (attempts > maxAttempts) {
-        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        cleanup();
         return;
       }
 
-      setDbOrderId(storedDbId);
-      setOrderNumber(storedOrderNum);
-
       try {
-        const res = await fetch(`/api/orders/${storedDbId}/status`);
+        const res = await fetch(`/api/orders/${storedDbId}/status`, { cache: "no-store" });
 
-        // إذا كان الطلب غير موجود (404)، يتم حذف المعرف من التخزين وإيقاف الـ polling فوراً لمنع تكرار الخطأ
+        // إذا كان الطلب غير موجود (404)، يتم تنظيف التخزين وإيقاف كل شيء فوراً
         if (res.status === 404) {
           localStorage.removeItem("dbOrderId");
           localStorage.removeItem("orderId");
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          cleanup();
           return;
         }
 
-        // في حال تم تجاوز معدل الطلبات (429)، أوقف الـ polling لتجنب استهلاك الخادم
         if (res.status === 429) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          cleanup();
           return;
         }
 
@@ -82,27 +138,29 @@ export default function OrderNotificationModal() {
         const data = await res.json();
 
         if (data.status === "confirmed" || data.status === "cancelled") {
-          // تم الوصول للحالة النهائية للطلب، نوقف التكرار فوراً
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-
-          const dismissKey = `order_dismissed_${storedDbId}_${data.status}`;
-          const isDismissed = sessionStorage.getItem(dismissKey);
-
-          setStatus(data.status);
-          if (!isDismissed) {
-            setIsOpen(true);
-          }
+          handleStatusUpdate(data.status);
         }
       } catch {
         // ignore network error
       }
     };
 
+    // فحص أولي سريع
     checkOrder();
-    pollTimerRef.current = setInterval(checkOrder, 5000);
+
+    // تكرار سريع كل 2.5 ثانية فقط عندما تكون الصفحة ظاهرة، ويتوقف تماماً بمجرد وصول التأكيد
+    pollTimerRef.current = setInterval(checkOrder, 2500);
+
+    // فحص فوري عند العودة لتبويب الموقع
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden && !isFinished) {
+        checkOrder();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      cleanup();
     };
   }, []);
 

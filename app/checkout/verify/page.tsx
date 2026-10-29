@@ -111,13 +111,14 @@ export default function VerifyPage() {
     let attempts = 0;
     const maxAttempts = 60; // 5 minutes max polling
     pollRef.current = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       attempts++;
       if (attempts > maxAttempts) {
         clearInterval(pollRef.current!);
         return;
       }
       try {
-        const res = await fetch(`/api/orders/${id}/status`);
+        const res = await fetch(`/api/orders/${id}/status`, { cache: "no-store" });
         if (res.status === 404 || res.status === 429) {
           clearInterval(pollRef.current!);
           return;
