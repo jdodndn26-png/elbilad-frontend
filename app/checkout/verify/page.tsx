@@ -106,10 +106,21 @@ export default function VerifyPage() {
 
   useEffect(() => {
     const id = typeof window !== "undefined" ? localStorage.getItem("dbOrderId") : null;
+    const orderNum = typeof window !== "undefined" ? localStorage.getItem("orderId") : null;
     if (!id) return;
     setDbOrderId(id);
+
+    // Make sure OrderNotificationModal is triggered
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("order_created", {
+          detail: { dbOrderId: id, orderId: orderNum || "" },
+        })
+      );
+    }
+
     let attempts = 0;
-    const maxAttempts = 60; // 5 minutes max polling
+    const maxAttempts = 200; // max ~5 minutes
     pollRef.current = setInterval(async () => {
       if (typeof document !== "undefined" && document.hidden) return;
       attempts++;
@@ -130,11 +141,18 @@ export default function VerifyPage() {
           if (data.status === "confirmed") {
             setConfirmed(true);
           }
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("order_status_updated", {
+                detail: { status: data.status, dbOrderId: id },
+              })
+            );
+          }
         }
       } catch {
         // ignore network glitches
       }
-    }, 5000);
+    }, 1500);
     return () => clearInterval(pollRef.current!);
   }, []);
 

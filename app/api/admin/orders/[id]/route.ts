@@ -29,10 +29,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json();
   const endpoint = body.financials ? "financials" : "status";
 
+  const reqHeaders: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    reqHeaders["cookie"] = `admin_token=${token}`;
+    reqHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
   // Try the dedicated admin endpoint first (covered by 600 req/min adminLimiter)
   let res = await fetch(`${getBackend()}/api/admin/orders/${id}/${endpoint}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", cookie: `admin_token=${token}` },
+    headers: reqHeaders,
     body: JSON.stringify(body),
   });
 
@@ -40,7 +46,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (res.status === 404) {
     res = await fetch(`${getBackend()}/api/checkout/${id}/${endpoint}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", cookie: `admin_token=${token}` },
+      headers: reqHeaders,
       body: JSON.stringify(body),
     });
   }

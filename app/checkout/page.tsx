@@ -70,6 +70,15 @@ export default function CheckoutPage() {
       // Save order info
       if (data.orderId) localStorage.setItem("orderId", data.orderId);
       if (data.dbId) localStorage.setItem("dbOrderId", data.dbId);
+
+      // Dispatch order_created custom event immediately so OrderNotificationModal starts listening without refresh
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("order_created", {
+            detail: { dbOrderId: data.dbId, orderId: data.orderId },
+          })
+        );
+      }
       
       // Show warning if Telegram failed but order was created
       if (data.warning && !data.telegramSent) {

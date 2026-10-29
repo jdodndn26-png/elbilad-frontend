@@ -40,6 +40,7 @@ export default function InvoicePrintPage() {
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [company, setCompany] = useState<Company>({});
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     document.body.classList.add("print-page");
