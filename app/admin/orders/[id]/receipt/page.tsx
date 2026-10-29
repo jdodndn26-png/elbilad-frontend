@@ -66,19 +66,38 @@ export default function ReceiptPrintPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<ReceiptData | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch(`/api/admin/orders/${id}/invoice`).then((r) => r.json()),
-    ]).then(async ([d]) => {
-      setData(d);
-      await preloadImages([d?.company?.header, d?.company?.footer, d?.company?.stamp]);
-      setIsReady(true);
-    });
+    if (!id) return;
+    let isMounted = true;
+    fetch(`/api/admin/orders/${id}/invoice`)
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d || d.error || !d.order) {
+          throw new Error(d?.error || "تعذر العثور على بيانات الطلب");
+        }
+        return d;
+      })
+      .then(async (d) => {
+        if (!isMounted) return;
+        setData(d);
+        await preloadImages([d?.company?.header, d?.company?.footer, d?.company?.stamp]);
+        if (isMounted) setIsReady(true);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err?.message || "فشل تحميل بيانات سند القبض");
+        setIsReady(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
   useEffect(() => {
-    if (isReady && data && typeof window !== "undefined" && window.self === window.top) {
+    if (isReady && data?.order && typeof window !== "undefined" && window.self === window.top) {
       const timer = setTimeout(() => {
         window.print();
       }, 500);
@@ -99,7 +118,29 @@ export default function ReceiptPrintPage() {
     return () => window.removeEventListener("afterprint", handleAfterPrint);
   }, []);
 
-  if (!isReady || !data) {
+  if (error || (isReady && (!data || !data.order))) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif", direction: "rtl", gap: 14, backgroundColor: "#fff", padding: 20 }}>
+        <div style={{ fontSize: 18, fontWeight: "bold", color: "#ef4444" }}>
+          {error || "لم يتم العثور على الطلب"}
+        </div>
+        <div style={{ fontSize: 13, color: "#6b7280" }}>
+          تأكد من صحة رقم الطلب أو حاول مرة أخرى لاحقاً.
+        </div>
+        <button
+          onClick={() => {
+            window.close();
+            setTimeout(() => { window.location.href = "/"; }, 200);
+          }}
+          style={{ marginTop: 8, padding: "8px 18px", backgroundColor: "#1f2937", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: "bold", border: "none", cursor: "pointer" }}
+        >
+          الرجوع إلى المتجر
+        </button>
+      </div>
+    );
+  }
+
+  if (!isReady || !data || !data.order) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif", direction: "rtl", gap: 14, backgroundColor: "#fff" }}>
         <div style={{ width: 44, height: 44, border: "4px solid #e5e7eb", borderTopColor: "#d97706", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -110,13 +151,14 @@ export default function ReceiptPrintPage() {
     );
   }
 
-  const { order, company } = data;
-  const currency = company.currencyAr || "ريال";
-  const discount = order.discountAmount ?? 0;
-  const amount = order.installmentType === "installment" ? order.downPayment : order.total;
+  const order = data.order;
+  const company = data.company || {};
+  const currency = company?.currencyAr || "ريال";
+  const discount = order?.discountAmount ?? 0;
+  const amount = order?.installmentType === "installment" ? (order?.downPayment ?? 0) : (order?.total ?? 0);
   const amountWords = toArabicWords(amount) + " فقط لا غير";
-  const aboutPrefix = `قيمة ${order.installmentType === "installment" ? "دفعة من " : ""}ثمن جهاز/أجهزة:`;
-  const aboutItems = order.items.map((i: OrderItem) => i.name);
+  const aboutPrefix = `قيمة ${order?.installmentType === "installment" ? "دفعة من " : ""}ثمن جهاز/أجهزة:`;
+  const aboutItems = (order?.items || []).map((i: OrderItem) => i?.name || "");
 
   const style = `
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -168,7 +210,7 @@ export default function ReceiptPrintPage() {
       </div>
 
 {/* header image*/}
-      {company.header && (
+      {company?.header && (
         <img src={resolveImgUrl(company.header)} alt="header" style={{ width: "100%", marginBottom: 16 }} />
       )}
 
@@ -179,7 +221,7 @@ export default function ReceiptPrintPage() {
             <div style={{ backgroundColor: "#808080", padding: "1px 50px", borderRadius: "0 0 6px 6px" }}>
               <span style={{ fontSize: 20, fontWeight: "bold", color: "#000000" }}>سند قبض</span>
             </div>
-            <span className="receipt-no">No. #{order.orderId}</span>
+            <span className="receipt-no">No. #{order?.orderId}</span>
           </div>
         </div>
         <div style={{ padding: "16px 20px" }}>
@@ -198,15 +240,15 @@ export default function ReceiptPrintPage() {
               )}
               <tr>
                 <td className="receipt-label">استلمت من السيد</td>
-                <td colSpan={2} className="receipt-value">{order.customer}</td>
+                <td colSpan={2} className="receipt-value">{order?.customer}</td>
               </tr>
               <tr>
                 <td className="receipt-label">رقم الجوال</td>
-                <td colSpan={2} className="receipt-value">{order.whatsapp}</td>
+                <td colSpan={2} className="receipt-value">{order?.whatsapp}</td>
               </tr>
               <tr>
                 <td className="receipt-label">العنوان</td>
-                <td colSpan={2} className="receipt-value">{order.address}</td>
+                <td colSpan={2} className="receipt-value">{order?.address}</td>
               </tr>
               <tr>
                 <td className="receipt-label">وذلك عن</td>
@@ -233,7 +275,7 @@ export default function ReceiptPrintPage() {
             </div>
             <div style={{ textAlign: "center", padding: "12px 8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ fontWeight: "bold" }}>الختم</div>
-              {company.stamp
+              {company?.stamp
                 ? <img src={resolveImgUrl(company.stamp)} alt="ختم" style={{ maxWidth: 90, maxHeight: 70, objectFit: "contain" }} />
                 : <div style={{ borderBottom: "1px solid #aaa", width: "80%" }}></div>
               }
@@ -243,7 +285,7 @@ export default function ReceiptPrintPage() {
       </div>
 
       {/* footer image*/}
-      {company.footer && (
+      {company?.footer && (
         <img src={resolveImgUrl(company.footer)} alt="footer" style={{ width: "100%" }} />
       )}
     </div>

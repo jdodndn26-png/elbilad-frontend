@@ -48,27 +48,45 @@ export default function PrintOrderPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [company, setCompany] = useState<Company>({});
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+    let isMounted = true;
     Promise.all([
-      fetch(`/api/admin/orders/${id}`).then((r) => r.json()),
+      fetch(`/api/admin/orders/${id}`).then(async (r) => {
+        const o = await r.json().catch(() => ({}));
+        if (!r.ok || !o || o.error || (!o._id && !o.orderId)) {
+          throw new Error(o?.error || "تعذر العثور على بيانات الطلب");
+        }
+        return o;
+      }),
       fetch("/api/admin/company").then((r) => r.json()).catch(() => ({})),
     ]).then(async ([o, c]) => {
+      if (!isMounted) return;
       setOrder(o);
-      setCompany(c);
+      setCompany(c || {});
       await preloadImages([c?.header, c?.footer, c?.stamp]);
+      if (isMounted) setIsReady(true);
+    }).catch((err) => {
+      if (!isMounted) return;
+      setError(err?.message || "فشل تحميل بيانات الفاتورة");
       setIsReady(true);
     });
+
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
   useEffect(() => {
-    if (isReady && typeof window !== "undefined" && window.self === window.top) {
+    if (isReady && order && typeof window !== "undefined" && window.self === window.top) {
       const timer = setTimeout(() => {
         window.print();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [isReady]);
+  }, [isReady, order]);
 
   // إرجاع العميل للموقع بعد إتمام أو إلغاء الطباعة
   useEffect(() => {
@@ -82,6 +100,28 @@ export default function PrintOrderPage() {
     window.addEventListener("afterprint", handleAfterPrint);
     return () => window.removeEventListener("afterprint", handleAfterPrint);
   }, []);
+
+  if (error || (isReady && !order)) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif", direction: "rtl", gap: 14, backgroundColor: "#fff", padding: 20 }}>
+        <div style={{ fontSize: 18, fontWeight: "bold", color: "#ef4444" }}>
+          {error || "لم يتم العثور على الطلب"}
+        </div>
+        <div style={{ fontSize: 13, color: "#6b7280" }}>
+          تأكد من صحة رقم الطلب أو حاول مرة أخرى لاحقاً.
+        </div>
+        <button
+          onClick={() => {
+            window.close();
+            setTimeout(() => { window.location.href = "/"; }, 200);
+          }}
+          style={{ marginTop: 8, padding: "8px 18px", backgroundColor: "#1f2937", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: "bold", border: "none", cursor: "pointer" }}
+        >
+          الرجوع إلى المتجر
+        </button>
+      </div>
+    );
+  }
 
   if (!isReady || !order) {
     return (

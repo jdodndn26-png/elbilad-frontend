@@ -68,16 +68,34 @@ export default function ContractPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<{ order: Order; company: Company } | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+    let isMounted = true;
     fetch(`/api/admin/orders/${id}/invoice`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d || d.error || !d.order) {
+          throw new Error(d?.error || "تعذر العثور على بيانات الطلب");
+        }
+        return d;
+      })
       .then(async (d) => {
+        if (!isMounted) return;
         setData(d);
         await preloadImages([d?.company?.header, d?.company?.footer, d?.company?.stamp]);
-        setIsReady(true);
+        if (isMounted) setIsReady(true);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err?.message || "فشل تحميل بيانات العقد");
+        setIsReady(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
   useEffect(() => {
@@ -86,7 +104,7 @@ export default function ContractPage() {
   }, []);
 
   useEffect(() => {
-    if (isReady && data && typeof window !== "undefined" && window.self === window.top) {
+    if (isReady && data?.order && typeof window !== "undefined" && window.self === window.top) {
       const timer = setTimeout(() => {
         window.print();
       }, 500);
@@ -107,7 +125,29 @@ export default function ContractPage() {
     return () => window.removeEventListener("afterprint", handleAfterPrint);
   }, []);
 
-  if (!isReady || !data) {
+  if (error || (isReady && (!data || !data.order))) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif", direction: "rtl", gap: 14, backgroundColor: "#fff", padding: 20 }}>
+        <div style={{ fontSize: 18, fontWeight: "bold", color: "#ef4444" }}>
+          {error || "لم يتم العثور على الطلب"}
+        </div>
+        <div style={{ fontSize: 13, color: "#6b7280" }}>
+          تأكد من صحة رقم الطلب أو حاول مرة أخرى لاحقاً.
+        </div>
+        <button
+          onClick={() => {
+            window.close();
+            setTimeout(() => { window.location.href = "/"; }, 200);
+          }}
+          style={{ marginTop: 8, padding: "8px 18px", backgroundColor: "#1f2937", color: "#fff", borderRadius: 8, fontSize: 13, fontWeight: "bold", border: "none", cursor: "pointer" }}
+        >
+          الرجوع إلى المتجر
+        </button>
+      </div>
+    );
+  }
+
+  if (!isReady || !data || !data.order) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif", direction: "rtl", gap: 14, backgroundColor: "#fff" }}>
         <div style={{ width: 44, height: 44, border: "4px solid #e5e7eb", borderTopColor: "#7c3aed", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -118,9 +158,10 @@ export default function ContractPage() {
     );
   }
 
-  const { order, company } = data;
+  const order = data.order;
+  const company = data.company || {};
 
-  if (order.installmentType !== "installment") {
+  if (order?.installmentType !== "installment") {
     return (
       <div style={{ fontFamily: "Arial, sans-serif", padding: 40, textAlign: "center", direction: "rtl" }}>
         <h2 style={{ color: "#374151", marginBottom: 12, fontSize: 20, fontWeight: "bold" }}>تنبيه: هذا الطلب تم بنظام الدفع الكامل</h2>
@@ -135,14 +176,14 @@ export default function ContractPage() {
     );
   }
 
-  const currency = company.currencyAr || "ريال";
-  const discount = order.discountAmount ?? 0;
-  const totalAfterDiscount = order.total;
-  const remaining = Math.max(0, totalAfterDiscount - (order.downPayment || 0));
-  const monthly = order.monthlyPayment || (order.months > 0 ? Math.ceil(remaining / order.months) : remaining);
-  const productNames = order.items.map((i) => i.name).join("، ");
+  const currency = company?.currencyAr || "ريال";
+  const discount = order?.discountAmount ?? 0;
+  const totalAfterDiscount = order?.total ?? 0;
+  const remaining = Math.max(0, totalAfterDiscount - (order?.downPayment || 0));
+  const monthly = order?.monthlyPayment || (order?.months && order.months > 0 ? Math.ceil(remaining / order.months) : remaining);
+  const productNames = (order?.items || []).map((i) => i.name).join("، ");
 
-  const now = new Date(order.createdAt);
+  const now = new Date(order?.createdAt || Date.now());
   const firstPayment = new Date(now);
   firstPayment.setMonth(firstPayment.getMonth() + 1);
   const firstPaymentStr = `${firstPayment.getFullYear()}/${String(firstPayment.getMonth() + 1).padStart(2, "0")}/${String(firstPayment.getDate()).padStart(2, "0")}`;
@@ -187,12 +228,12 @@ export default function ContractPage() {
         </button>
       </div>
 
-      {company.header && <img src={resolveImgUrl(company.header)} alt="header" style={{ width: "100%", marginBottom: 24 }} />}
+      {company?.header && <img src={resolveImgUrl(company.header)} alt="header" style={{ width: "100%", marginBottom: 24 }} />}
 
       {/* العنوان */}
       <div style={{ textAlign: "center", marginBottom: 20 }}>
         <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1, marginBottom: 4 }}>عقد بيع بالتقسيط</div>
-        <div style={{ fontSize: 13, color: "#555" }}>{company.nameAr || ""}</div>
+        <div style={{ fontSize: 13, color: "#555" }}>{company?.nameAr || ""}</div>
       </div>
 
       <hr style={{ border: "none", borderTop: "2px solid #1a1a1a", marginBottom: 16 }} />
@@ -202,9 +243,9 @@ export default function ContractPage() {
         <tbody>
           <tr>
             <td style={{ padding: 16, lineHeight: 2.4, textAlign: "justify" }}>
-              نعم أنا السيد :/ <strong>{order.customer}</strong> برقم جوال :/ <strong>{order.whatsapp}</strong> وعنوانه :/ <strong>{order.address}</strong>
+              نعم أنا السيد :/ <strong>{order?.customer}</strong> برقم جوال :/ <strong>{order?.whatsapp}</strong> وعنوانه :/ <strong>{order?.address}</strong>
               <br />
-              أُقر وأعترف وأنا في حالتي الشرعية وبكامل قواي العقلية بأني في ذمتي للمؤسسة المدعوة :/ <strong>{company.nameAr}</strong>
+              أُقر وأعترف وأنا في حالتي الشرعية وبكامل قواي العقلية بأني في ذمتي للمؤسسة المدعوة :/ <strong>{company?.nameAr}</strong>
               <br />
               مبلغ وقدره :/ <strong>{remaining.toLocaleString("ar-SA")} ( {toArabicWords(remaining)} ) {currency} فقط.</strong>
               <br />
@@ -218,7 +259,7 @@ export default function ContractPage() {
               <br />
               نهاية المبلغ المذكور أعلاه وأنني بسداد الأقساط في موعدها بدون تأخر عن أي قسط عن موعده المحدد فإني ملتزم التزاماً تاماً بسداد المبلغ المتبقي كاملاً دفعة واحدة.
               <br />
-              كما أنني أُقر على نفسي بأنه لا يوجد التزامات مالية ولا كفالات غرامية وقد أذنت والله خير الشاهدين لاسم :/ <strong>{order.customer}</strong>
+              كما أنني أُقر على نفسي بأنه لا يوجد التزامات مالية ولا كفالات غرامية وقد أذنت والله خير الشاهدين لاسم :/ <strong>{order?.customer}</strong>
             </td>
           </tr>
         </tbody>
@@ -233,11 +274,11 @@ export default function ContractPage() {
         </div>
         <div style={{ textAlign: "center", width: 180 }}>
           <div style={{ borderTop: "1px solid #1a1a1a", paddingTop: 8, color: "#555" }}>الختم</div>
-          {company.stamp && <img src={resolveImgUrl(company.stamp)} alt="ختم" style={{ maxWidth: 130, maxHeight: 110, objectFit: "contain", marginTop: 8, opacity: 0.85 }} />}
+          {company?.stamp && <img src={resolveImgUrl(company.stamp)} alt="ختم" style={{ maxWidth: 130, maxHeight: 110, objectFit: "contain", marginTop: 8, opacity: 0.85 }} />}
         </div>
       </div>
 
-      {company.footer && <img src={resolveImgUrl(company.footer)} alt="footer" style={{ width: "100%", marginTop: 24 }} />}
+      {company?.footer && <img src={resolveImgUrl(company.footer)} alt="footer" style={{ width: "100%", marginTop: 24 }} />}
     </div>
   );
 }
