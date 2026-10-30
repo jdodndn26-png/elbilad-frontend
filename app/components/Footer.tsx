@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { FaWhatsapp, FaMobileAlt, FaEnvelope } from "react-icons/fa";
+import { FaWhatsapp, FaMobileAlt, FaEnvelope, FaFilePdf } from "react-icons/fa";
 import { getCachedCompany } from "../lib/products-cache";
 
 export default async function Footer() {
@@ -12,22 +12,30 @@ export default async function Footer() {
   }
 
   function toInlineUrl(url: string) {
-    if (!url) return url;
-    const rawUrl = url.replace("/image/upload/", "/raw/upload/").replace(/\/fl_attachment:[^/]+\//, "/");
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(rawUrl)}&embedded=false`;
+    if (!url) return "";
+    const trimmed = url.trim();
+    if (!trimmed) return "";
+    if (trimmed.includes("cloudinary.com")) {
+      return `/api/file-proxy?url=${encodeURIComponent(trimmed)}`;
+    }
+    return ensureAbsolute(trimmed);
   }
 
   const qrSrc: string = c.qrImage || "";
   const qrLink: string = ensureAbsolute(c.qrLink || "");
 
   const footerItems: { image: string; linkType: string; link: string; file: string }[] =
-    (c.footerItems || []).filter((item: { image: string }) => item.image);
+    (c.footerItems || []).filter(
+      (item: { image?: string; link?: string; file?: string }) =>
+        Boolean(item.image || item.file || item.link)
+    );
 
   const img1: string = c.img1 || "";
   const linkType1: string = c.link1Type || c.linkType1 || "link";
   const useFile1 =
     linkType1 === "file" || (!!(c.file1 || "").trim() && !(c.link1 || "").trim());
   const link1: string = useFile1 ? toInlineUrl(c.file1 || "") : ensureAbsolute(c.link1 || "");
+
   const img2: string = c.img2 || "";
   const linkType2: string = c.link2Type || c.linkType2 || "link";
   const useFile2 =
@@ -79,7 +87,7 @@ export default async function Footer() {
             {c.whatsapp && (
               <li className="flex items-center gap-2">
                 <FaWhatsapp className="text-emerald-500 shrink-0" size={16} />
-                <a href={`https://wa.me/${c.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="hover:text-[#6DBE00] transition-colors" dir="ltr">{c.whatsapp}</a>
+                <a href={`https://wa.me/${c.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="hover:text-[#6DBE00] transition-colors" dir="ltr">{c.whatsapp}</a>
               </li>
             )}
             {c.phone && (
@@ -100,7 +108,7 @@ export default async function Footer() {
             {/* QR */}
             {qrSrc && (
               qrLink
-                ? <a href={qrLink} target="_blank" rel="noreferrer">
+                ? <a href={qrLink} target="_blank" rel="noopener noreferrer">
                     <Image src={qrSrc} alt="رمز QR للتواصل" width={60} height={60} className="object-contain rounded border border-gray-200 bg-white p-1" style={{ width: 60, height: 60 }} />
                   </a>
                 : <Image src={qrSrc} alt="رمز QR للتواصل" width={60} height={60} className="object-contain rounded border border-gray-200 bg-white p-1" style={{ width: 60, height: 60 }} />
@@ -109,19 +117,36 @@ export default async function Footer() {
             {/* Footer Items */}
             {footerItems.map((item, i) => {
               const href = getHref(item);
-              const el = (
-                <Image key={i} src={item.image} alt={`شعار شريك ${i + 1}`} width={60} height={60}
-                  className="object-contain rounded" style={{ width: 60, height: 60 }} />
+              const el = item.image ? (
+                <Image
+                  key={i}
+                  src={item.image}
+                  alt={`شعار شريك ${i + 1}`}
+                  width={60}
+                  height={60}
+                  className="object-contain rounded"
+                  style={{ width: 60, height: 60 }}
+                />
+              ) : (
+                <div
+                  key={i}
+                  className="w-[60px] h-[60px] rounded bg-white/10 hover:bg-white/20 border border-white/20 flex flex-col items-center justify-center p-1 text-white transition-colors cursor-pointer shrink-0"
+                  style={{ width: 60, height: 60 }}
+                  title="عرض المستند"
+                >
+                  <FaFilePdf size={22} className="text-red-300 mb-0.5" />
+                  <span className="text-[9px] font-medium leading-none">مستند</span>
+                </div>
               );
               return href
-                ? <a key={i} href={href} target="_blank" rel="noreferrer">{el}</a>
+                ? <a key={i} href={href} target="_blank" rel="noopener noreferrer">{el}</a>
                 : <span key={i}>{el}</span>;
             })}
 
             {/* img1 */}
             {img1 && (
               link1
-                ? <a href={link1} target="_blank" rel="noreferrer">
+                ? <a href={link1} target="_blank" rel="noopener noreferrer">
                     <Image src={img1} alt="وسيلة دفع معتمدة" width={60} height={60} className="object-contain rounded" style={{ width: 60, height: 60 }} />
                   </a>
                 : <Image src={img1} alt="وسيلة دفع معتمدة" width={60} height={60} className="object-contain rounded" style={{ width: 60, height: 60 }} />
@@ -130,7 +155,7 @@ export default async function Footer() {
             {/* img2 */}
             {img2 && (
               link2
-                ? <a href={link2} target="_blank" rel="noreferrer">
+                ? <a href={link2} target="_blank" rel="noopener noreferrer">
                     <Image src={img2} alt="وسيلة دفع معتمدة" width={60} height={60} className="object-contain rounded" style={{ width: 60, height: 60 }} />
                   </a>
                 : <Image src={img2} alt="وسيلة دفع معتمدة" width={60} height={60} className="object-contain rounded" style={{ width: 60, height: 60 }} />
