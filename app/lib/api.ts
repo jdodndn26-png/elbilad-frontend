@@ -1,4 +1,18 @@
-const ALLOWED_HOSTS = ["localhost", "pasmthatfee.com", "albilaad-ksa.com"];
+const ALLOWED_HOSTS = [
+  "localhost",
+  "127.0.0.1",
+  "pasmthatfee.com",
+  "albilaad-ksa.com",
+  "albiladksa.com",
+  "elbilad-backend.onrender.com",
+];
+
+function isAllowedHost(hostname: string): boolean {
+  if (ALLOWED_HOSTS.includes(hostname)) return true;
+  if (hostname.endsWith(".onrender.com")) return true;
+  return false;
+}
+
 const ALLOWED_PREFIXES = [
   "/api/admin",
   "/api/products",
@@ -9,13 +23,16 @@ function getApiBase(): string {
   if (typeof window !== "undefined") {
     return "";
   }
-  const raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
+  const raw = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
   try {
     const { hostname } = new URL(raw);
-    if (!ALLOWED_HOSTS.includes(hostname)) throw new Error(`Blocked host: ${hostname}`);
+    if (!isAllowedHost(hostname)) {
+      console.warn(`[apiFetch] Untrusted host blocked: ${hostname}`);
+      return raw;
+    }
     return raw;
   } catch {
-    return "http://localhost:5000";
+    return raw;
   }
 }
 

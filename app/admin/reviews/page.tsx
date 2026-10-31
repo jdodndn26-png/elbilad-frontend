@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { apiFetch } from "../../lib/api";
@@ -195,7 +195,7 @@ export default function ReviewsPage() {
                       onClick={() => toggleApproved(r._id)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${r.approved ? "bg-green-500" : "bg-gray-300"}`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${r.approved ? "translate-x-6" : "translate-x-1"}`} />
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${r.approved ? "-translate-x-6" : "-translate-x-1"}`} />
                     </button>
                   </td>
                   <td className="px-4 py-3">
@@ -242,7 +242,7 @@ export default function ReviewsPage() {
                     onClick={() => toggleApproved(r._id)}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${r.approved ? "bg-green-500" : "bg-gray-300"}`}
                   >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${r.approved ? "translate-x-6" : "translate-x-1"}`} />
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${r.approved ? "-translate-x-6" : "-translate-x-1"}`} />
                   </button>
                 </div>
               </div>

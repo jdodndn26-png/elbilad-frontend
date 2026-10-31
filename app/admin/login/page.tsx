@@ -24,7 +24,7 @@ export default function AdminLoginPage() {
       });
       const data = await res.json();
       if (!res.ok) setError(data.error || "حدث خطأ");
-      else router.push("/admin/dashboard");
+      else router.push("/admin/orders");
     } catch {
       setError("تعذر الاتصال بالخادم");
     } finally {

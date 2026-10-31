@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -303,7 +303,7 @@ export default function ProductsPage() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
             <div className="text-4xl mb-3">🗑️</div>
             <h2 className="text-lg font-bold text-gray-800 mb-1">تأكيد الحذف</h2>
-            <p className="text-sm text-gray-500 mb-1">هتحذف المنتج</p>
+            <p className="text-sm text-gray-500 mb-1">هل أنت متأكد من حذف المنتج</p>
             <p className="text-base font-bold text-red-600 mb-4">« {confirmDelete.name} »</p>
             <div className="flex gap-3 justify-center">
               <button onClick={confirmDeleteAction} className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold px-6 py-2 rounded-lg transition-colors">

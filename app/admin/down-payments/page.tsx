@@ -26,10 +26,6 @@ export default function DownPaymentsPage() {
   const [savingCat, setSavingCat] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
 
-  // Custom Category Input State
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customCategoryInput, setCustomCategoryInput] = useState("");
-
   // Delete Confirmation Modal State
   const [confirmDeleteCat, setConfirmDeleteCat] = useState<string | null>(null);
 
@@ -107,27 +103,6 @@ export default function DownPaymentsPage() {
       }
     }
     setSelectedCategory(cat);
-  }
-
-  // Handle custom model creation/selection
-  function handleAddCustomCategory() {
-    const trimmed = customCategoryInput.trim();
-    if (!trimmed) {
-      toast.error("يرجى كتابة اسم الموديل");
-      return;
-    }
-    if (hasUnsavedCatChanges) {
-      if (!window.confirm("لديك تعديلات غير محفوظة لهذا الموديل، هل تريد تجاهلها والانتقال؟")) {
-        return;
-      }
-    }
-    setCategories((prev) =>
-      prev.includes(trimmed) ? prev : [...prev, trimmed].sort((a, b) => a.localeCompare(b, "ar"))
-    );
-    setSelectedCategory(trimmed);
-    setCustomCategoryInput("");
-    setShowCustomInput(false);
-    toast.success(`تم اختيار الموديل "${trimmed}"`);
   }
 
   // Save Global amounts
@@ -443,52 +418,22 @@ export default function DownPaymentsPage() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-gray-600 font-semibold">اختر الموديل أو التصنيف الفرعي</label>
-              <button
-                type="button"
-                onClick={() => setShowCustomInput(!showCustomInput)}
-                className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline"
-              >
-                {showCustomInput ? "✕ إلغاء إدخال يدوي" : "➕ الموديل غير موجود؟ اكتب اسمه يدويًا"}
-              </button>
-            </div>
-
-            {showCustomInput ? (
-              <div className="flex flex-col sm:flex-row gap-2 bg-blue-50/60 p-3 rounded-lg border border-blue-200">
-                <input
-                  type="text"
-                  value={customCategoryInput}
-                  onChange={(e) => setCustomCategoryInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddCustomCategory()}
-                  placeholder="اكتب اسم الموديل الجديد (مثال: iPhone 16 Pro Max)"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCustomCategory}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors whitespace-nowrap"
-                >
-                  تحديد الموديل
-                </button>
-              </div>
-            ) : (
-              <select
-                value={selectedCategory}
-                onChange={(e) => handleSelectCategory(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="">-- اضغط لاختيار الموديل --</option>
-                {categories.map((cat) => {
-                  const isCustom = categoryDownPayments.some((c) => c.category === cat);
-                  return (
-                    <option key={cat} value={cat}>
-                      {cat} {isCustom ? "★ (مضبوط)" : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
+            <label className="block text-xs text-gray-600 font-semibold mb-1.5">اختر الموديل أو التصنيف الفرعي</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => handleSelectCategory(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">-- اضغط لاختيار الموديل --</option>
+              {categories.map((cat) => {
+                const isCustom = categoryDownPayments.some((c) => c.category === cat);
+                return (
+                  <option key={cat} value={cat}>
+                    {cat} {isCustom ? "★ (مضبوط)" : ""}
+                  </option>
+                );
+              })}
+            </select>
           </div>
 
           {selectedCategory && (

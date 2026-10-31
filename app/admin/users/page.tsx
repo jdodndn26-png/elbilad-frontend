@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
-
 type Admin = { _id: string; name: string; email: string; phone: string; createdAt: string };
 
 const TrashIcon = () => (
@@ -19,6 +18,7 @@ const EditIcon = () => (
 
 export default function UsersPage() {
   const [admins, setAdmins] = useState<Admin[]>([]);
+  const [pageLoading, setPageLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
   const [error, setError] = useState("");
@@ -57,12 +57,18 @@ export default function UsersPage() {
   const ADMIN_USERS_URL = "/api/admin/users" as const;
 
   async function fetchAdmins() {
-    const res = await fetch(ADMIN_USERS_URL);
-    if (res.ok) setAdmins(await res.json());
+    try {
+      const res = await fetch(ADMIN_USERS_URL);
+      if (res.ok) setAdmins(await res.json());
+    } catch {
+      toast.error("فشل الاتصال بالخادم");
+    } finally {
+      setPageLoading(false);
+    }
   }
 
   useEffect(() => {
-    fetch(ADMIN_USERS_URL).then((res) => res.ok ? res.json() : null).then((data) => { if (data) setAdmins(data); });
+    fetchAdmins();
   }, []);
 
   async function handleAdd(e: React.FormEvent) {
@@ -73,18 +79,23 @@ export default function UsersPage() {
     if (emailErr || passErr) return;
     setError("");
     setLoading(true);
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) return setError(data.error);
-    setShowModal(false);
-    setForm({ name: "", phone: "", email: "", password: "" });
-    toast.success(`تم إضافة ${form.name} بنجاح 🎉`);
-    fetchAdmins();
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      setLoading(false);
+      if (!res.ok) return setError(data.error || "فشل إضافة المستخدم");
+      setShowModal(false);
+      setForm({ name: "", phone: "", email: "", password: "" });
+      toast.success(`تم إضافة ${form.name} بنجاح 🎉`);
+      fetchAdmins();
+    } catch {
+      setLoading(false);
+      setError("حدث خطأ في الاتصال بالخادم");
+    }
   }
 
   async function handleEdit(e: React.FormEvent) {
@@ -97,17 +108,22 @@ export default function UsersPage() {
     setEditLoading(true);
     const id = safeId(editAdmin!._id);
     if (!id) return setEditError("معرّف غير صالح");
-    const res = await fetch(`/api/admin/users/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editForm),
-    });
-    const data = await res.json();
-    setEditLoading(false);
-    if (!res.ok) return setEditError(data.error);
-    setEditAdmin(null);
-    toast.success("تم حفظ التعديلات بنجاح ✅");
-    fetchAdmins();
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      setEditLoading(false);
+      if (!res.ok) return setEditError(data.error || "فشل حفظ التعديلات");
+      setEditAdmin(null);
+      toast.success("تم حفظ التعديلات بنجاح ✅");
+      fetchAdmins();
+    } catch {
+      setEditLoading(false);
+      setEditError("حدث خطأ في الاتصال بالخادم");
+    }
   }
 
   async function handleDelete(id: string, name: string) {
@@ -120,71 +136,88 @@ export default function UsersPage() {
     setConfirmDelete(null);
     const safeDeleteId = safeId(id);
     if (!safeDeleteId) return toast.error("معرّف غير صالح");
-    const res = await fetch(`/api/admin/users/${safeDeleteId}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) return toast.error(data.error);
-    toast.success(`تم حذف ${name} بنجاح ✅`);
-    fetchAdmins();
+    try {
+      const res = await fetch(`/api/admin/users/${safeDeleteId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error(data.error || "فشل حذف المشرف");
+      toast.success(`تم حذف « ${name} » بنجاح ✅`);
+      fetchAdmins();
+    } catch {
+      toast.error("حدث خطأ في الاتصال أثناء الحذف");
+    }
   }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6 gap-3">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-800">إدارة المستخدمين</h1>
         <button
           onClick={() => { setShowModal(true); setError(""); }}
-          className="bg-blue-600 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-blue-700 text-sm font-medium whitespace-nowrap"
+          className="bg-blue-600 text-white px-3 py-2 sm:px-4 rounded-lg hover:bg-blue-700 text-sm font-medium whitespace-nowrap shadow-xs"
         >
           + إضافة مستخدم
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow overflow-hidden">
+      <div className="bg-white rounded-xl shadow overflow-hidden border border-gray-100">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm text-right min-w-[500px]">
-          <thead className="bg-gray-50 text-gray-600 font-semibold text-base">
-            <tr>
-              <th className="px-4 py-3">#</th>
-              <th className="px-4 py-3">الاسم</th>
-              <th className="px-4 py-3">البريد الإلكتروني</th>
-
-              <th className="px-4 py-3">تاريخ الإضافة</th>
-              <th className="px-4 py-3">إجراء</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {admins.map((a, i) => (
-              <tr key={a._id} className="hover:bg-gray-50 text-base">
-                <td className="px-4 py-3 text-gray-400 font-medium">{i + 1}</td>
-                <td className="px-4 py-3 font-medium text-gray-800">{a.name}</td>
-                <td className="px-4 py-3 text-gray-600">{a.email}</td>
-
-                <td className="px-4 py-3 text-gray-500">{new Date(a.createdAt).toLocaleDateString("ar-EG")}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => { setEditAdmin(a); setEditForm({ name: a.name, phone: a.phone, email: a.email, password: "" }); setEditError(""); setEditFormErrors({ email: "", password: "" }); }}
-                      className="text-blue-500 hover:text-blue-700" title="تعديل">
-                      <EditIcon />
-                    </button>
-                    <button onClick={() => handleDelete(a._id, a.name)} className="text-red-500 hover:text-red-700" title="حذف">
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </td>
+          <table className="w-full text-sm text-right min-w-[600px]">
+            <thead className="bg-gray-50 text-gray-600 font-semibold text-sm">
+              <tr>
+                <th className="px-4 py-3 w-12">#</th>
+                <th className="px-4 py-3">الاسم</th>
+                <th className="px-4 py-3">البريد الإلكتروني</th>
+                <th className="px-4 py-3">رقم الهاتف</th>
+                <th className="px-4 py-3">تاريخ الإضافة</th>
+                <th className="px-4 py-3 text-center">إجراءات</th>
               </tr>
-            ))}
-            {admins.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">لا يوجد مستخدمون</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pageLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <span>جاري تحميل المستخدمين...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : admins.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">لا يوجد مستخدمون حالياً</td>
+                </tr>
+              ) : (
+                admins.map((a, i) => (
+                  <tr key={a._id} className="hover:bg-gray-50 text-base transition-colors">
+                    <td className="px-4 py-3 text-gray-400 font-medium text-sm">{i + 1}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-800 text-sm">{a.name}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{a.email}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm" dir="ltr">{a.phone || "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{new Date(a.createdAt).toLocaleDateString("ar-EG")}</td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => { setEditAdmin(a); setEditForm({ name: a.name, phone: a.phone || "", email: a.email, password: "" }); setEditError(""); setEditFormErrors({ email: "", password: "" }); }}
+                          className="text-blue-500 hover:text-blue-700 p-1" title="تعديل">
+                          <EditIcon />
+                        </button>
+                        <button onClick={() => handleDelete(a._id, a.name)} className="text-red-500 hover:text-red-700 p-1" title="حذف">
+                          <TrashIcon />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {editAdmin && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md shadow-xl overflow-y-auto max-h-[90vh]">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">تعديل: {editAdmin.name}</h2>
+            <h2 className="text-lg font-bold text-gray-800 mb-4">تعديل بيانات: {editAdmin.name}</h2>
             <form onSubmit={handleEdit} className="space-y-3">
               {[
                 { label: "الاسم", key: "name", type: "text" },
@@ -197,7 +230,7 @@ export default function UsersPage() {
                     value={editForm[key as keyof typeof editForm]}
                     onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
+                    required={key === "name"}
                   />
                 </div>
               ))}
@@ -247,7 +280,7 @@ export default function UsersPage() {
               <div className="flex gap-2 pt-2">
                 <button type="submit" disabled={editLoading}
                   className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-60">
-                  {editLoading ? "جاري الحفظ..." : "حفظ"}
+                  {editLoading ? "جاري الحفظ..." : "حفظ التعديلات"}
                 </button>
                 <button type="button" onClick={() => setEditAdmin(null)}
                   className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 text-sm">
@@ -260,11 +293,11 @@ export default function UsersPage() {
       )}
 
       {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" dir="rtl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
             <div className="text-4xl mb-3">🗑️</div>
             <h2 className="text-lg font-bold text-gray-800 mb-1">تأكيد الحذف</h2>
-            <p className="text-sm text-gray-500 mb-1">هتحذف الأدمن</p>
+            <p className="text-sm text-gray-500 mb-2">هل أنت متأكد من حذف هذا المشرف؟</p>
             <p className="text-base font-bold text-red-600 mb-4">« {confirmDelete.name} »</p>
             <div className="flex gap-3 justify-center">
               <button
@@ -295,7 +328,7 @@ export default function UsersPage() {
                 <line x1="12" y1="9" x2="12" y2="13"/>
                 <line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <p className="text-amber-700 text-sm">سيمتلك هذا المستخدم <span className="font-semibold">صلاحيات الأدمن الكاملة</span> على لوحة التحكم</p>
+              <p className="text-amber-700 text-sm">سيمتلك هذا المستخدم <span className="font-semibold">صلاحيات المشرف الكاملة</span> على لوحة التحكم</p>
             </div>
 
             <form onSubmit={handleAdd} className="space-y-3">
@@ -310,7 +343,7 @@ export default function UsersPage() {
                     value={form[key as keyof typeof form]}
                     onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
+                    required={key === "name"}
                   />
                 </div>
               ))}

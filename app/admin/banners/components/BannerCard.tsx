@@ -1,37 +1,34 @@
 "use client";
 import Image from "next/image";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { LABELS } from "../constants";
 import type { BannerItem } from "../types";
 
-/**
- * Returns a Cloudinary URL resized to a narrow thumbnail (w=600, auto quality/format).
- * Falls back to the original URL for non-Cloudinary sources.
- * This prevents the admin from downloading full-resolution banners
- * (often 1–5 MB) just to show a small 280×112px card preview.
- */
 function toAdminThumb(url: string): string {
   if (!url.includes("res.cloudinary.com")) return url;
-  // Insert transformation before the version segment: /upload/w_600,q_auto,f_auto/v…
   return url.replace("/upload/", "/upload/w_600,q_auto,f_auto/");
 }
 
 interface BannerCardProps {
   banner: BannerItem;
   index: number;
+  totalBanners: number;
   isLoading: boolean;
   inputRef: (el: HTMLInputElement | null) => void;
   onUpload: (index: number, file: File) => void;
   onToggle: (index: number) => void;
   onDeleteImage: (index: number) => void;
   onDeleteSlot: (index: number) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 export default function BannerCard({
-  banner, index, isLoading, inputRef, onUpload, onToggle, onDeleteImage, onDeleteSlot,
+  banner, index, totalBanners, isLoading, inputRef, onUpload, onToggle, onDeleteImage, onDeleteSlot, onMoveUp, onMoveDown,
 }: BannerCardProps) {
   const hasImage = !!banner.url;
   const localRef = useRef<HTMLInputElement | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const triggerInput = () => {
     if (!isLoading) localRef.current?.click();
@@ -39,19 +36,42 @@ export default function BannerCard({
 
   return (
     <div
-      className={`group relative bg-white rounded-2xl overflow-hidden shadow-sm border transition-all duration-300 hover:shadow-lg ${
+      className={`group relative bg-white rounded-2xl overflow-hidden shadow-xs border transition-all duration-300 hover:shadow-md ${
         !banner.active && hasImage ? "opacity-60" : ""
-      } ${hasImage ? "border-indigo-100" : "border-gray-100"}`}
+      } ${hasImage ? "border-indigo-100" : "border-gray-200"}`}
     >
       {/* Status Badge */}
       <div className="absolute top-3 right-3 z-10">
-        <span className={`text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${
+        <span className={`text-xs font-bold px-2.5 py-1 rounded-full shadow-xs ${
           hasImage && banner.active ? "bg-emerald-500 text-white"
           : hasImage && !banner.active ? "bg-orange-400 text-white"
-          : "bg-gray-100 text-gray-400"
+          : "bg-gray-100 text-gray-500 border border-gray-200"
         }`}>
           {hasImage && banner.active ? "✓ مفعّل" : hasImage ? "⏸ موقوف" : "فارغ"}
         </span>
+      </div>
+
+      {/* Up / Down touch reorder buttons in top-left */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-1 bg-white/90 backdrop-blur-xs p-1 rounded-lg border border-gray-200 shadow-xs">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
+          disabled={index === 0 || isLoading}
+          title="تحريك لأعلى"
+          className="w-6 h-6 flex items-center justify-center text-xs font-bold rounded hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent text-gray-700"
+        >
+          ▲
+        </button>
+        <span className="text-[10px] font-bold text-gray-400 px-0.5">{index + 1}</span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
+          disabled={index === totalBanners - 1 || isLoading}
+          title="تحريك لأسفل"
+          className="w-6 h-6 flex items-center justify-center text-xs font-bold rounded hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent text-gray-700"
+        >
+          ▼
+        </button>
       </div>
 
       {/* Image Area */}
@@ -69,6 +89,7 @@ export default function BannerCard({
               fill
               className="object-cover transition-transform duration-500 group-hover:scale-105 opacity-90"
               sizes="(max-width: 1280px) 100vw, 600px"
+              unoptimized
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center">
               <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/90 text-gray-800 text-sm font-semibold px-4 py-2 rounded-xl shadow">
@@ -127,8 +148,8 @@ export default function BannerCard({
                 disabled={isLoading}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition disabled:opacity-40 whitespace-nowrap ${
                   banner.active
-                    ? "bg-orange-50 hover:bg-orange-100 text-orange-500"
-                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-600"
+                    ? "bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200"
+                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200"
                 }`}
               >
                 {banner.active ? "إيقاف" : "تفعيل"}
@@ -137,7 +158,7 @@ export default function BannerCard({
                 onClick={() => onDeleteImage(index)}
                 disabled={isLoading}
                 title="حذف الصورة"
-                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition disabled:opacity-40"
+                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition border border-red-200 disabled:opacity-40"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -147,7 +168,7 @@ export default function BannerCard({
           )}
 
           <button
-            onClick={() => onDeleteSlot(index)}
+            onClick={() => setConfirmDelete(true)}
             disabled={isLoading}
             title="حذف البانر بالكامل"
             className="p-1.5 bg-gray-100 hover:bg-red-100 text-gray-400 hover:text-red-500 rounded-lg transition disabled:opacity-40"
@@ -158,6 +179,35 @@ export default function BannerCard({
           </button>
         </div>
       </div>
+
+      {/* Confirm Delete Slot Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl" onClick={() => setConfirmDelete(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-5 w-full max-w-sm text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-3xl mb-2">🗑️</div>
+            <h3 className="text-base font-bold text-gray-800 mb-1">تأكيد حذف خانة البانر</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              هل أنت متأكد من حذف {LABELS[index] || `بانر ${index + 1}`} بالكامل؟ سيتم إزالة مكانه من الصفحة الرئيسية.
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button
+                type="button"
+                onClick={() => { onDeleteSlot(index); setConfirmDelete(false); }}
+                className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition"
+              >
+                نعم، احذف
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded-lg hover:bg-gray-50 transition"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

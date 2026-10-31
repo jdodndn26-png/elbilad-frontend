@@ -12,7 +12,14 @@ export default function AdminNavbar({ onMenuClick }: { onMenuClick: () => void }
     fetch("/api/admin/company")
       .then((r) => r.json())
       .then((d) => {
-        if (d.logo) setLogo(d.logo.startsWith("http") ? d.logo : `http://localhost:5000${d.logo}`);
+        if (d.logo) {
+          if (d.logo.startsWith("http")) {
+            setLogo(d.logo);
+          } else {
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+            setLogo(`${apiBase}${d.logo.startsWith("/") ? "" : "/"}${d.logo}`);
+          }
+        }
       })
       .catch(() => {});
 

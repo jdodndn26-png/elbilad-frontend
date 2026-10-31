@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 interface DeleteModalProps {
   name: string;
@@ -12,7 +12,7 @@ export default function DeleteModal({ name, onConfirm, onClose }: DeleteModalPro
       <div className="bg-white rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-sm text-center">
         <div className="text-3xl sm:text-4xl mb-3">🗑️</div>
         <h2 className="text-base sm:text-lg font-bold text-gray-800 mb-1">تأكيد الحذف</h2>
-        <p className="text-xs sm:text-sm text-gray-500 mb-1">هتحذف التصنيف</p>
+        <p className="text-xs sm:text-sm text-gray-500 mb-1">هل أنت متأكد من حذف التصنيف</p>
         <p className="text-sm sm:text-base font-bold text-red-600 mb-2">« {name} »</p>
         <p className="text-xs text-gray-400 mb-4">سيتم إزالة هذا التصنيف من جميع المنتجات المرتبطة به</p>
         <div className="flex gap-3 justify-center">

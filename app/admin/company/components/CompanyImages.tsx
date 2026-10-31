@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { imageFields, withCacheBust } from "../constants";
 import type { CompanyData } from "../types";
 
@@ -28,7 +28,7 @@ export default function CompanyImages({ data, onImageChange, onImageDelete }: Co
             <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-1">{label}</label>
             {data[key] && (
               <div className="relative inline-block mb-2">
-                <img src={withCacheBust(data[key])} alt={label} className="h-14 object-contain rounded border" />
+                <img src={data[key]} alt={label} className="h-14 object-contain rounded border" />
                 <button
                   type="button"
                   onClick={() => setDeleteConfirmKey(key)}

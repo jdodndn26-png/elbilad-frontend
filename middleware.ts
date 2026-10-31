@@ -4,8 +4,8 @@ export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get("admin_token")?.value;
 
-  // Allow customer/public access to order documents (print, contract, receipt)
-  const isDocumentPage = /^\/admin\/orders\/[^/]+\/(print|contract|receipt)$/.test(pathname);
+  // Allow customer/public access to order documents (print, contract, receipt, invoice)
+  const isDocumentPage = /^\/admin\/orders\/[^/]+\/(print|contract|receipt|invoice)$/.test(pathname);
   if (isDocumentPage) {
     return NextResponse.next();
   }
@@ -15,7 +15,7 @@ export default function middleware(req: NextRequest) {
   }
 
   if (pathname === "/admin/login" && token) {
-    return NextResponse.redirect(new URL("/admin/dashboard", req.url));
+    return NextResponse.redirect(new URL("/admin/orders", req.url));
   }
 
   return NextResponse.next();
@@ -24,5 +24,3 @@ export default function middleware(req: NextRequest) {
 export const config = {
   matcher: ["/admin/:path*"],
 };
-
-

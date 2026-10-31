@@ -43,7 +43,7 @@ export function useBanners() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل الرفع");
       setBanners((prev) => prev.map((b, i) => i === index ? { ...b, url: data.url } : b));
-      toast.success("تم رفع البانر");
+      toast.success("تم رفع البانر بنجاح ✅");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "فشل الرفع");
     } finally {
@@ -59,7 +59,7 @@ export function useBanners() {
       });
       if (!res.ok) throw new Error("فشل الحذف");
       setBanners((prev) => prev.map((b, i) => i === index ? { ...b, url: "" } : b));
-      toast.success("تم حذف الصورة");
+      toast.success("تم حذف الصورة بنجاح ✅");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "فشل الحذف");
     } finally {
@@ -75,7 +75,7 @@ export function useBanners() {
       });
       if (!res.ok) throw new Error("فشل الحذف");
       setBanners((prev) => prev.filter((_, i) => i !== index));
-      toast.success("تم حذف البانر");
+      toast.success("تم حذف خانة البانر بنجاح ✅");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "فشل الحذف");
     } finally {
@@ -92,7 +92,7 @@ export function useBanners() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشل التعديل");
       setBanners((prev) => prev.map((b, i) => i === index ? { ...b, active: data.active } : b));
-      toast.success(data.active ? "تم تفعيل البانر" : "تم إيقاف البانر");
+      toast.success(data.active ? "تم تفعيل البانر ✅" : "تم إيقاف البانر");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "فشل التعديل");
     } finally {
@@ -109,7 +109,7 @@ export function useBanners() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "فشلت الإضافة");
       setBanners((prev) => [...prev, { url: "", active: true, _id: `slot-${prev.length}` }]);
-      toast.success("تمت إضافة بانر جديد");
+      toast.success("تمت إضافة بانر جديد بنجاح ✅");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "فشلت الإضافة");
     } finally {
@@ -128,15 +128,29 @@ export function useBanners() {
         body: JSON.stringify({ order }),
       });
       if (!res.ok) throw new Error("فشل حفظ الترتيب");
-      toast.success("تم حفظ الترتيب");
+      toast.success("تم حفظ الترتيب بنجاح ✅");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "فشل حفظ الترتيب");
     }
+  };
+
+  const moveBanner = (from: number, to: number) => {
+    if (to < 0 || to >= banners.length) return;
+    const newBanners = [...banners];
+    const [moved] = newBanners.splice(from, 1);
+    newBanners.splice(to, 0, moved);
+
+    const originalOrder = Array.from({ length: banners.length }, (_, i) => i);
+    const [movedIdx] = originalOrder.splice(from, 1);
+    originalOrder.splice(to, 0, movedIdx);
+
+    handleReorder(newBanners, originalOrder);
   };
 
   return {
     banners, loading, addingBanner, fetchError,
     inputRefs, handleUpload, handleDeleteImage,
     handleDeleteSlot, handleToggle, handleAddBanner, handleReorder,
+    moveBanner,
   };
 }
