@@ -27,21 +27,38 @@ export default function PaymentForm({ total, itemCount, initialData, installment
   const maxMonths = installmentMonths ?? 24;
   const MONTHS_OPTIONS = Array.from({ length: Math.floor(maxMonths / 2) }, (_, i) => (i + 1) * 2);
 
-  const rawAmounts = downPaymentAmounts && downPaymentAmounts.length > 0 ? downPaymentAmounts : [1000, 1500, 2000];
-  const DOWN_OPTIONS = rawAmounts.map((amount) => ({
-    label: amount.toLocaleString("en-US") + " ر.س",
-    amount,
-  }));
+  const count = Math.max(1, itemCount || 1);
+  const rawAmounts = useMemo(() => {
+    return downPaymentAmounts && downPaymentAmounts.length > 0 ? downPaymentAmounts : [1000, 1500, 2000];
+  }, [downPaymentAmounts]);
+
+  const DOWN_OPTIONS = useMemo(() => {
+    return rawAmounts.map((baseAmount) => {
+      const amount = baseAmount * count;
+      return {
+        label: amount.toLocaleString("en-US") + " ر.س",
+        amount,
+      };
+    });
+  }, [rawAmounts, count]);
 
   const [installmentType, setInstallmentType] = useState<"full" | "installment">(initialData?.installmentType ?? "installment");
   const [installmentProvider, setInstallmentProvider] = useState<"tabby" | "tamara" | "store">("store");
   const [months, setMonths] = useState(initialData?.months ?? 12);
-  const [downPayment, setDownPayment] = useState(DOWN_OPTIONS[0].amount);
+  const [downPayment, setDownPayment] = useState(() => {
+    if (initialData?.downPayment && initialData.downPayment > 0) {
+      return initialData.downPayment;
+    }
+    return DOWN_OPTIONS[0]?.amount ?? 0;
+  });
 
   useEffect(() => {
-    setDownPayment(DOWN_OPTIONS[0].amount);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [downPaymentAmounts]);
+    if (DOWN_OPTIONS.length === 0) return;
+    setDownPayment((prev) => {
+      const exists = DOWN_OPTIONS.some((o) => o.amount === prev);
+      return exists ? prev : DOWN_OPTIONS[0].amount;
+    });
+  }, [DOWN_OPTIONS]);
   const [showSchedule, setShowSchedule] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -240,7 +257,7 @@ export default function PaymentForm({ total, itemCount, initialData, installment
                     </label>
                     {availableDownOptions.length === 0 ? (
                       <p className="text-red-400 text-xs bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                        إجمالي الطلب أقل من الحد الأدنى للدفعة الأولى (1,000 ر.س)
+                        إجمالي الطلب أقل من الحد الأدنى للدفعة الأولى ({DOWN_OPTIONS[0]?.amount ? `${DOWN_OPTIONS[0].amount.toLocaleString("en-US")} ر.س` : "1,000 ر.س"})
                       </p>
                     ) : (
                       <div className="grid grid-cols-3 gap-2">

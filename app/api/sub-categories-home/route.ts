@@ -4,10 +4,10 @@ import { getBackend } from "../admin/_lib";
 export async function GET() {
   const [settingsRes, maxRes] = await Promise.all([
     fetch(`${getBackend()}/api/admin/sub-categories/home-settings`, {
-      next: { revalidate: 3600, tags: ["home-settings"] },
+      next: { revalidate: 2592000, tags: ["home-settings"] },
     }),
     fetch(`${getBackend()}/api/admin/sub-categories/max`, {
-      next: { revalidate: 3600, tags: ["home-settings"] },
+      next: { revalidate: 2592000, tags: ["home-settings"] },
     }),
   ]);
   const settings = settingsRes.ok ? await settingsRes.json() : [];

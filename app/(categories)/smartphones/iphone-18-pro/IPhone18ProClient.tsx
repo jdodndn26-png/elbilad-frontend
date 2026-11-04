@@ -69,7 +69,7 @@ function IPhone18ProCard({ product, index }: { product: Product; index: number }
       onClick={() => router.push(`/product/${product._id}`)}
     >
       {/* image */}
-      <div className="i18p-img-wrap">
+      <Link href={`/product/${product._id}`} className="i18p-img-wrap block">
         <div className="absolute inset-0 flex items-center justify-center">
           {resolvedImage ? (
             <Image
@@ -101,13 +101,15 @@ function IPhone18ProCard({ product, index }: { product: Product; index: number }
           />
           {product.inStock ? "متوفر" : "نفذ"}
         </div>
-      </div>
+      </Link>
 
       {/* content */}
       <div className="flex flex-col flex-1 px-3 pt-2 pb-3 gap-1">
-        <h3 className="text-[11px] sm:text-[13px] font-bold text-gray-800 leading-snug line-clamp-2 min-h-[28px]">
-          {product.name}
-        </h3>
+        <Link href={`/product/${product._id}`}>
+          <h3 className="text-[11px] sm:text-[13px] font-bold text-gray-800 leading-snug line-clamp-2 min-h-[28px] hover:text-[#155E6F] transition-colors">
+            {product.name}
+          </h3>
+        </Link>
 
         {(storage || color) && (
           <div className="flex flex-wrap gap-1">

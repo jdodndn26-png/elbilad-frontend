@@ -14,6 +14,10 @@ function getAvailableDownOptions(amounts: number[], finalTotal: number) {
 function getEffectiveDownPayment(availableAmounts: number[], selected: number): number {
   return availableAmounts.includes(selected) ? selected : availableAmounts[0] ?? 0;
 }
+function getScaledDownOptions(baseAmounts: number[], itemCount: number): number[] {
+  const count = Math.max(1, itemCount || 1);
+  return baseAmounts.map((a) => a * count);
+}
 
 function calcMonthly(
   finalTotal: number,
@@ -86,6 +90,25 @@ describe("الدفعة الأولى - الاختيار الفعلي", () => {
 
   test("يرجع 0 لو مفيش خيارات", () => {
     expect(getEffectiveDownPayment([], 1000)).toBe(0);
+  });
+});
+describe("الدفعة الأولى - مضاعفة الخيارات بناءً على عدد المنتجات", () => {
+  const baseAmounts = [500, 1000, 1500];
+
+  test("منتج واحد = نفس خيارات الأدمن (500, 1000, 1500)", () => {
+    expect(getScaledDownOptions(baseAmounts, 1)).toEqual([500, 1000, 1500]);
+  });
+
+  test("منتجين = تضرب في 2 (1000, 2000, 3000)", () => {
+    expect(getScaledDownOptions(baseAmounts, 2)).toEqual([1000, 2000, 3000]);
+  });
+
+  test("3 منتجات = تضرب في 3 (1500, 3000, 4500)", () => {
+    expect(getScaledDownOptions(baseAmounts, 3)).toEqual([1500, 3000, 4500]);
+  });
+
+  test("لو itemCount أقل من 1 = يعامل كمنتج واحد", () => {
+    expect(getScaledDownOptions(baseAmounts, 0)).toEqual([500, 1000, 1500]);
   });
 });
 

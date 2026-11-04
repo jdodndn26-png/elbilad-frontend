@@ -3,9 +3,14 @@ import { slugConfigs } from "../../lib/categoryConfig";
 import CategoryPageClient from "./CategoryPageClient";
 import { getCachedProducts, getCachedCompany } from "../../lib/products-cache";
 
-export const revalidate = 86400;
+export const revalidate = false;
 
-const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
+const BACKEND = (
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000"
+).replace(/\/$/, "");
+
 const SITE_URL = "https://www.albiladksa.com";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -16,6 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const siteName = company.nameAr || "مؤسسة البلاد الحديثة للإلكترونيات";
   const label = config?.label ?? slug;
   const parentLabel = config?.parentLabel ?? "";
+  const targetUrl = `${SITE_URL}${config?.parentHref || ""}/${slug}`;
 
   const title = parentLabel ? `${label} - ${parentLabel}` : label;
   const description = `تسوق ${label} بأفضل الأسعار وبالأقساط في ${siteName}. ${parentLabel ? `ضمن قسم ${parentLabel}.` : ""} شحن سريع وضمان معتمد.`;
@@ -30,7 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     keywords: [label, parentLabel, siteName, "أقساط", "شراء", "السعودية"].filter(Boolean),
     openGraph: {
       type: "website",
-      url: `${SITE_URL}/categories/${slug}`,
+      url: targetUrl,
       title: `${title} | ${siteName}`,
       description,
       siteName,
@@ -44,7 +50,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       images: logoUrl ? [logoUrl] : [],
     },
     alternates: {
-      canonical: `${SITE_URL}/categories/${slug}`,
+      canonical: targetUrl,
     },
   };
 }

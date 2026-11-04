@@ -1,7 +1,7 @@
 import IPhone18ProMaxClient from "./IPhone18ProMaxClient";
 import { getCachedProducts } from "../../../lib/products-cache";
 
-export const revalidate = 86400;
+export const revalidate = false;
 
 const KEYWORDS = [
   "ايفون 18 برو ماكس",

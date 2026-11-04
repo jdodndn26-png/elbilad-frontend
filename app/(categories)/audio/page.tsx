@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import AudioClient from "./AudioClient";
 import { getCachedProducts } from "../../lib/products-cache";
 
-export const revalidate = 86400;
+export const revalidate = false;
 
 const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
 const SITE_URL = "https://albilaad-ksa.com";

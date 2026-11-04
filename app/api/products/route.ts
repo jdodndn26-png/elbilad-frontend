@@ -7,12 +7,12 @@ export async function GET(req: NextRequest) {
 
   if (!q && !brand) {
     return NextResponse.json([], {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+      headers: { "Cache-Control": "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=86400" },
     });
   }
 
   const data = await searchCachedProducts(q, brand || undefined);
   return NextResponse.json(data, {
-    headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+    headers: { "Cache-Control": "public, max-age=86400, s-maxage=2592000, stale-while-revalidate=86400" },
   });
 }

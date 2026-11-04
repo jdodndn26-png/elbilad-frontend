@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 export function getBackend(): string {
-  return (process.env.BACKEND_URL || "http://localhost:5000").replace(/\/$/, "");
+  return (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
 }
 
 export function getAdminToken(req: NextRequest): string {

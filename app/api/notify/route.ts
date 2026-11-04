@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const BACKEND_URL = (
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000"
+).replace(/\/$/, "");
+
 // Helper to sanitize inputs
 function sanitize(str: string): string {
   if (!str) return "";
@@ -111,7 +117,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Fetch products from backend to verify prices
-      const productsRes = await fetch(`${process.env.BACKEND_URL}/api/products`, {
+      const productsRes = await fetch(`${BACKEND_URL}/api/products`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -178,8 +184,8 @@ export async function POST(req: NextRequest) {
     let dbSaveSuccess = false;
     
     try {
-      console.log(`[DEBUG] BACKEND_URL: ${process.env.BACKEND_URL}`);
-      const dbRes = await fetch(`${process.env.BACKEND_URL}/api/checkout`, {
+      console.log(`[DEBUG] BACKEND_URL: ${BACKEND_URL}`);
+      const dbRes = await fetch(`${BACKEND_URL}/api/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 

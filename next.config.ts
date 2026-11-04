@@ -1,6 +1,25 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      {
+        source: "/products/:id*",
+        destination: "/product/:id*",
+        permanent: true,
+      },
+      {
+        source: "/categories/:slug*",
+        destination: "/:slug*",
+        permanent: true,
+      },
+      {
+        source: "/smartphones/iphone-18",
+        destination: "/smartphones/iphone-18-pro-max",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return {
       beforeFiles: [

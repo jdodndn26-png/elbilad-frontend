@@ -14,7 +14,11 @@ function filterProducts(products: Product[], slug: string): Product[] {
   const { brand, category, nameIncludes } = config.filters;
   return products.filter((p) => {
     const matchBrand = brand ? p.brand?.toLowerCase() === brand.toLowerCase() : true;
-    const matchCategory = category ? p.category?.trim().toLowerCase() === category.trim().toLowerCase() : false;
+    const cat = (p.category || p.subCategory || "").trim().toLowerCase();
+    const targetCat = category ? category.trim().toLowerCase() : "";
+    const matchCategory = targetCat
+      ? cat === targetCat || cat.includes(targetCat) || targetCat.includes(cat)
+      : false;
     const matchName = nameIncludes?.length
       ? nameIncludes.some((kw) => p.name?.toLowerCase().includes(kw.toLowerCase()))
       : false;
@@ -59,8 +63,6 @@ export default function CategoryPageClient({ slug, initialProducts }: { slug: st
   const parentHref = config.parentHref ?? "/";
   const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE);
 
-
-
   return (
     <>
       <style>{`
@@ -86,16 +88,14 @@ export default function CategoryPageClient({ slug, initialProducts }: { slug: st
           background-size: 300% 300%;
           animation: heroGradient 8s ease infinite;
         }
-        .slide-up { animation: slideUp 0.5s ease forwards; }
-        .card-reveal { animation: cardReveal 0.45s ease forwards; }
         .particle-cat {
           position: absolute;
-          border-radius: 50%;
           background: rgba(255,255,255,0.15);
+          border-radius: 50%;
           animation: floatParticle linear infinite;
         }
-        .feature-strip-cat::-webkit-scrollbar { display: none; }
-        .feature-strip-cat { -ms-overflow-style: none; scrollbar-width: none; }
+        .slide-up { animation: slideUp 0.6s cubic-bezier(0.16,1,0.3,1) both; }
+        .card-reveal { animation: cardReveal 0.5s cubic-bezier(0.16,1,0.3,1) both; }
       `}</style>
 
       <main className="min-h-screen" dir="rtl" style={{ background: "#f5f7f9" }}>
@@ -154,8 +154,6 @@ export default function CategoryPageClient({ slug, initialProducts }: { slug: st
             </svg>
           </div>
         </div>
-
-
 
         {/* Products Grid */}
         <div className="max-w-6xl mx-auto px-3 sm:px-4 pb-8 sm:pb-12">

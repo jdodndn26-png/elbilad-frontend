@@ -2,7 +2,7 @@ import { MetadataRoute } from "next";
 import { slugConfigs } from "./lib/categoryConfig";
 
 const BASE_URL = "https://www.albiladksa.com";
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const BACKEND_URL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
 
 const staticRoutes: { path: string; priority: number; changeFreq: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [
   { path: "", priority: 1.0, changeFreq: "daily" },
@@ -22,7 +22,7 @@ const staticRoutes: { path: string; priority: number; changeFreq: MetadataRoute.
   { path: "/cart", priority: 0.5, changeFreq: "weekly" },
 ];
 
-export const revalidate = 86400;
+export const revalidate = false;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
@@ -34,8 +34,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
   }));
 
-  const slug_urls: MetadataRoute.Sitemap = Object.keys(slugConfigs).map((slug) => ({
-    url: `${BASE_URL}/categories/${slug}`,
+  const slug_urls: MetadataRoute.Sitemap = Object.entries(slugConfigs).map(([slug, config]) => ({
+    url: `${BASE_URL}${config.parentHref || ""}/${slug}`,
     changeFrequency: "weekly",
     priority: 0.7,
     lastModified: now,

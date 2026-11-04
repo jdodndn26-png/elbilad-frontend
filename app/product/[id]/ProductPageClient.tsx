@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { IoArrowForward, IoShareSocial, IoHomeOutline, IoCartOutline, IoCheckmarkDoneCircle } from "react-icons/io5";
@@ -16,7 +16,8 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export default function ProductPageClient({ id, initialProduct }: { id: string; initialProduct: Product | null }) {
   const router = useRouter();
-  const [product] = useState<Product | null>(initialProduct);
+  const [product, setProduct] = useState<Product | null>(initialProduct);
+  const [loading, setLoading] = useState(!initialProduct);
   const [addedToCart, setAddedToCart] = useState(false);
   const [variantImages, setVariantImages] = useState<string[] | null>(null);
   const [mobileLoading, setMobileLoading] = useState(false);
@@ -25,15 +26,34 @@ export default function ProductPageClient({ id, initialProduct }: { id: string; 
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [currentProductToAdd, setCurrentProductToAdd] = useState<Product | null>(null);
   const addItem = useCartStore((s) => s.addItem);
-  
+
+  useEffect(() => {
+    if (!product && id) {
+      let isMounted = true;
+      setLoading(true);
+      fetch(`/api/products/${encodeURIComponent(id)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (isMounted && data && (data._id || data.name)) {
+            setProduct(data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [id, product]);
+
   const mobilePrice = displayPrice ?? (product?.salePrice ?? product?.originalPrice ?? 0);
   const mobileName = displayName ?? product?.name ?? "";
   const isIPhone18 = ["ابل ايفون 18", "ايفون 18 برو ماكس", "ايفون 18 برو", "ابل ايفون 18 برو", "ايفون 18 دو"].includes(product?.category ?? "");
 
-  if (!product)
-    return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400 text-lg">المنتج غير موجود</p></div>;
-
   const handleMobileAdd = () => {
+    if (!product) return;
     const success = addItem(currentProductToAdd || product);
     if (!success) return;
     setMobileLoading(true);
@@ -47,17 +67,33 @@ export default function ProductPageClient({ id, initialProduct }: { id: string; 
 
   const resolveImg = (src: string) =>
     src.startsWith("http") ? src : src.startsWith("/uploads") ? src : `${API}${src}`;
-  const merged = variantImages ?? [...(product.images || []), ...(product.image ? [product.image] : [])];
+  const merged = variantImages ?? [...(product?.images || []), ...(product?.image ? [product.image] : [])];
   const allImages = [...new Set(merged)].map(resolveImg);
 
   const handleBack = () => {
-    if (window.history.length > 1) router.back();
-    else router.push("/smartphones/iphone-18");
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/smartphones");
+    }
   };
 
   const handleShare = async () => {
+    if (!product) return;
     try { await navigator.share({ title: product.name, url: window.location.href }); } catch {}
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[#f4f6f8]" dir="rtl">
+        <div className="w-10 h-10 border-4 border-[#1a6b7d] border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 font-bold text-sm">جاري تحميل تفاصيل المنتج...</p>
+      </div>
+    );
+  }
+
+  if (!product)
+    return <div className="min-h-screen flex items-center justify-center bg-[#f4f6f8]"><p className="text-gray-400 text-lg">المنتج غير موجود</p></div>;
 
   return (
     <>
@@ -178,8 +214,6 @@ export default function ProductPageClient({ id, initialProduct }: { id: string; 
           `}</style>
         </div>
       </main>
-      
-
     </>
   );
 }

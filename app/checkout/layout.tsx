@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 
-const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
+const BACKEND = (
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000"
+).replace(/\/$/, "");
 const SITE_URL = "https://www.albiladksa.com";
 
 async function getCompany() {
   try {
-    const r = await fetch(`${BACKEND}/api/admin/company`, { next: { revalidate: 86400 } });
+    const r = await fetch(`${BACKEND}/api/admin/company`, { next: { revalidate: 2592000, tags: ["company"] } });
     return r.ok ? r.json() : {};
   } catch { return {}; }
 }

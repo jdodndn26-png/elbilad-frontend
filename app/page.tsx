@@ -10,7 +10,7 @@ import {
 } from "./lib/products-cache";
 
 // ISR: revalidate every 86400s (24h) — cache tag invalidation triggers instant updates on changes
-export const revalidate = 86400;
+export const revalidate = false;
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.albiladksa.com";
 

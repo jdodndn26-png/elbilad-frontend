@@ -1,9 +1,13 @@
 import { unstable_cache } from "next/cache";
 
-const BACKEND = process.env.BACKEND_URL || "http://localhost:5000";
+const BACKEND = (
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000"
+).replace(/\/$/, "");
 
 // ─── Products ────────────────────────────────────────────────────────────────
-// revalidate: 86400s (24h) + tag-based revalidation on product mutations
+// revalidate: false (permanent static cache, updated on-demand only when admin edits)
 export const getCachedProducts = unstable_cache(
   async () => {
     try {
@@ -15,17 +19,15 @@ export const getCachedProducts = unstable_cache(
     }
   },
   ["all-products"],
-  { revalidate: 86400, tags: ["products"] }
+  { revalidate: false, tags: ["products"] }
 );
 
 // ─── Hero Banners ─────────────────────────────────────────────────────────────
-// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedBanners = unstable_cache(
   async (): Promise<string[]> => {
     try {
       const res = await fetch(`${BACKEND}/api/admin/banners`, { cache: "no-store" });
       if (!res.ok) return [];
-      // Backend now returns only active banners with URLs
       const data: { url: string }[] = await res.json();
       return Array.isArray(data)
         ? data.map((b) => (b.url.startsWith("http") ? b.url : `${BACKEND}${b.url}`))
@@ -35,11 +37,10 @@ export const getCachedBanners = unstable_cache(
     }
   },
   ["hero-banners"],
-  { revalidate: 86400, tags: ["banners"] }
+  { revalidate: false, tags: ["banners"] }
 );
 
 // ─── Home Config (settings + max) ────────────────────────────────────────────
-// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedHomeConfig = unstable_cache(
   async () => {
     try {
@@ -55,12 +56,10 @@ export const getCachedHomeConfig = unstable_cache(
     }
   },
   ["home-config"],
-  { revalidate: 86400, tags: ["home-settings"] }
+  { revalidate: false, tags: ["home-settings"] }
 );
 
 // ─── Category Banners Bulk ────────────────────────────────────────────────────
-// revalidate: 86400s (24h), tag-based revalidation available
-// Takes a comma-joined string so unstable_cache can use it as a stable key
 export const getCachedBannerMap = unstable_cache(
   async (categoriesKey: string): Promise<Record<string, string[]>> => {
     if (!categoriesKey) return {};
@@ -75,11 +74,10 @@ export const getCachedBannerMap = unstable_cache(
     }
   },
   ["category-banners-bulk"],
-  { revalidate: 86400, tags: ["category-banners"] }
+  { revalidate: false, tags: ["category-banners"] }
 );
 
 // ─── Company ──────────────────────────────────────────────────────────────────
-// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedCompany = unstable_cache(
   async () => {
     try {
@@ -90,11 +88,10 @@ export const getCachedCompany = unstable_cache(
     }
   },
   ["company"],
-  { revalidate: 86400, tags: ["company"] }
+  { revalidate: false, tags: ["company"] }
 );
 
 // ─── Sub-categories Public ────────────────────────────────────────────────────
-// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedSubCategoriesPublic = unstable_cache(
   async () => {
     try {
@@ -105,11 +102,10 @@ export const getCachedSubCategoriesPublic = unstable_cache(
     }
   },
   ["sub-categories-public"],
-  { revalidate: 86400, tags: ["products"] }
+  { revalidate: false, tags: ["products"] }
 );
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
-// revalidate: 86400s (24h), tag-based revalidation available
 export const getCachedReviews = unstable_cache(
   async () => {
     try {
@@ -120,7 +116,7 @@ export const getCachedReviews = unstable_cache(
     }
   },
   ["reviews"],
-  { revalidate: 86400, tags: ["reviews"] }
+  { revalidate: false, tags: ["reviews"] }
 );
 
 // ─── Single product (for product detail page) ────────────────────────────────
@@ -129,14 +125,24 @@ export const getCachedProduct = (id: string) =>
   unstable_cache(
     async () => {
       try {
-        const res = await fetch(`${BACKEND}/api/products/${id}?full=1`, { cache: "no-store" });
-        return res.ok ? res.json() : null;
-      } catch {
-        return null;
+        const cleanId = encodeURIComponent(String(id || "").trim());
+        const res = await fetch(`${BACKEND}/api/products/${cleanId}?full=1`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!res.ok) {
+          if (res.status === 404) return null;
+          throw new Error(`Upstream error ${res.status}`);
+        }
+        return res.json();
+      } catch (err: any) {
+        if (err?.message?.includes("Upstream error 404")) return null;
+        // Don't cache transient network/timeout errors!
+        throw err;
       }
     },
     [`product-${id}`],
-    { revalidate: 86400, tags: ["products"] }
+    { revalidate: false, tags: ["products"] }
   )();
 
 // ─── Search (uses cached products, no extra DB hit) ──────────────────────────
@@ -144,7 +150,11 @@ export async function searchCachedProducts(q: string, brand?: string) {
   const products: Record<string, string>[] = await getCachedProducts();
   const query = q.toLowerCase();
   return products.filter((p) => {
-    const matchQ = !q || p.name?.toLowerCase().includes(query) || p.brand?.toLowerCase().includes(query) || p.category?.toLowerCase().includes(query);
+    const matchQ =
+      !q ||
+      p.name?.toLowerCase().includes(query) ||
+      p.brand?.toLowerCase().includes(query) ||
+      p.category?.toLowerCase().includes(query);
     const matchBrand = !brand || p.brand?.toLowerCase() === brand.toLowerCase();
     return matchQ && matchBrand;
   });
