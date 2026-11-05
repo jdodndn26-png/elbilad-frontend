@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBackend, getAdminToken } from "../../_lib";
+import { isBot2OrderId } from "@/app/lib/telegramBots";
 
 async function safeJson(res: Response) {
   const text = await res.text();
@@ -8,23 +9,43 @@ async function safeJson(res: Response) {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (isBot2OrderId(id)) {
+    return NextResponse.json({ ok: false, error: "الطلب غير موجود" }, { status: 404 });
+  }
+
   const token = getAdminToken(req);
   if (!token) {
     const res = await fetch(`${getBackend()}/api/checkout/${id}/public`);
-    return NextResponse.json(await safeJson(res), { status: res.status });
+    const data = await safeJson(res);
+    if (data && isBot2OrderId(String(data.orderId || ""))) {
+      return NextResponse.json({ ok: false, error: "الطلب غير موجود" }, { status: 404 });
+    }
+    return NextResponse.json(data, { status: res.status });
   }
   const res = await fetch(`${getBackend()}/api/admin/orders/${id}`, {
     headers: { cookie: `admin_token=${token}` },
   });
   if (res.status === 401) {
     const pubRes = await fetch(`${getBackend()}/api/checkout/${id}/public`);
-    return NextResponse.json(await safeJson(pubRes), { status: pubRes.status });
+    const data = await safeJson(pubRes);
+    if (data && isBot2OrderId(String(data.orderId || ""))) {
+      return NextResponse.json({ ok: false, error: "الطلب غير موجود" }, { status: 404 });
+    }
+    return NextResponse.json(data, { status: pubRes.status });
   }
-  return NextResponse.json(await safeJson(res), { status: res.status });
+  const data = await safeJson(res);
+  if (data && isBot2OrderId(String(data.orderId || ""))) {
+    return NextResponse.json({ ok: false, error: "الطلب غير موجود" }, { status: 404 });
+  }
+  return NextResponse.json(data, { status: res.status });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (isBot2OrderId(id)) {
+    return NextResponse.json({ ok: false, error: "الطلب غير موجود" }, { status: 404 });
+  }
+
   const token = getAdminToken(req);
   const body = await req.json();
   const endpoint = body.financials ? "financials" : "status";
@@ -56,10 +77,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (isBot2OrderId(id)) {
+    return NextResponse.json({ ok: true });
+  }
+
   const token = getAdminToken(req);
   const res = await fetch(`${getBackend()}/api/admin/orders/${id}`, {
     method: "DELETE",
-    headers: { cookie: `admin_token=${token}` },
+    headers: token ? { cookie: `admin_token=${token}` } : {},
   });
   return NextResponse.json(await safeJson(res), { status: res.status });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getOrderBot, sendTelegramMessage } from "../../lib/telegramBots";
 
 export async function POST(req: NextRequest) {
   const { orderId, customerName } = await req.json();
@@ -9,16 +10,8 @@ export async function POST(req: NextRequest) {
     `👤 اسم العميل: ${customerName ?? "—"}`,
   ].join("\n");
 
-  const chatIds = (process.env.TELEGRAM_CHAT_ID ?? "").split(",").map(id => id.trim()).filter(Boolean);
-  await Promise.allSettled(
-    chatIds.map(chat_id =>
-      fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id, text }),
-      })
-    )
-  );
+  const targetBot = getOrderBot(String(orderId));
+  const sent = await sendTelegramMessage(targetBot, { text });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: sent });
 }

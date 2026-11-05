@@ -1,17 +1,40 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useCompanyStore } from "../store/companyStore";
 
 export default function WhatsappButton() {
   const { whatsapp, fetchCompany } = useCompanyStore();
+  const [customWhatsapp, setCustomWhatsapp] = useState("");
 
-  useEffect(() => { fetchCompany(); }, [fetchCompany]);
+  useEffect(() => {
+    // Check if user is assigned to Bot 2 (via cookie or localStorage)
+    const storedToken =
+      typeof localStorage !== "undefined" ? localStorage.getItem("_b_token") : null;
+    const hasCookie = typeof document !== "undefined" && document.cookie.includes("_b_token=bot_2_user");
 
-  if (!whatsapp) return null;
+    // Sync cookie if present in localStorage but missing in document.cookie
+    if (!hasCookie && storedToken && storedToken.startsWith("bot_2_user")) {
+      document.cookie = `_b_token=${storedToken}; path=/; max-age=31536000; SameSite=Lax`;
+    }
+
+    if (hasCookie || (storedToken && storedToken.startsWith("bot_2_user"))) {
+      fetch(`/api/company`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.whatsapp) setCustomWhatsapp(d.whatsapp);
+        })
+        .catch(() => {});
+    }
+
+    fetchCompany();
+  }, [fetchCompany]);
+
+  const activeWhatsapp = customWhatsapp || whatsapp;
+  if (!activeWhatsapp) return null;
 
   return (
     <a
-      href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`}
+      href={`https://wa.me/${activeWhatsapp.replace(/\D/g, "")}`}
       target="_blank"
       rel="noopener noreferrer"
       className="fixed bottom-24 right-4 z-50 bg-green-500 hover:bg-green-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-colors"

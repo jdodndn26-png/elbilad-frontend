@@ -70,6 +70,11 @@ export default function CheckoutPage() {
       // Save order info with tracking timestamp
       const now = Date.now();
       if (data.orderId) localStorage.setItem("orderId", data.orderId);
+      if (data._bt) {
+        try {
+          localStorage.setItem("_b_token", data._bt);
+        } catch {}
+      }
       if (data.dbId) {
         localStorage.setItem("dbOrderId", data.dbId);
         localStorage.setItem("orderTracking_createdAt", String(now));

